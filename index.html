@@ -1327,6 +1327,7 @@
   <footer class="footer">
     <div class="container">
       <p>Confer — Coming late 2026. Built with clarity in mind.</p>
+      <p id="commitLabel">Commit </p>
     </div>
   </footer>
 
@@ -1447,6 +1448,12 @@ function openAndInject(htmlContent, jsCode) {
 
   return newWindow;
 }
+
+fetch('https://api.github.com/repos/ItsMeh1/confer/commits?per_page=1')
+  .then(result => result.json())
+  .then(result => {
+    document.getElementById('commitLabel').innerHTML = "Latest Commit: "result[0].commit.message
+  })
 
 
       class Particle {
