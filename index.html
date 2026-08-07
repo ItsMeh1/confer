@@ -1038,7 +1038,7 @@
       </div>
       <h1>Video meetings that<br>just work.</h1>
       <p>Confer is a clean, reliable video platform built for teams and individuals. No installs. No clutter.</p>
-      <form class="hero-form" onsubmit="event.preventDefault(); v()">
+      <form class="hero-form" onsubmit="event.preventDefault(); verify()">
         <input type="text" id="precode" placeholder="Enter your pre-release code..." required>
         <button type="submit" class="btn btn-primary">Try It</button>
       </form>
@@ -1391,7 +1391,7 @@ function showToast(msg) {
   }, 2500);
 }
 
-async function v() {
+async function verify() {
   const input = document.getElementById('precode');
   const code = input.value.trim().toUpperCase();
 
@@ -1420,7 +1420,7 @@ async function v() {
 
   } catch (e) {
     console.error(e);
-    showToast('Error validating code. Make sure codes.json exists.');
+    showToast('Error validating code.');
   }
 }
 
