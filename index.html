@@ -992,6 +992,7 @@
   </style>
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -1038,7 +1039,7 @@
       </div>
       <h1>Video meetings that<br>just work.</h1>
       <p>Confer is a clean, reliable video platform built for teams and individuals. No installs. No clutter.</p>
-      <form class="hero-form" onsubmit="event.preventDefault();">
+      <form class="hero-form" onsubmit="event.preventDefault(); verify(); return false;">
         <input type="text" id="precode" placeholder="Enter your pre-release code..." required>
         <button type="submit" id="releaseSubmitBtn" class="btn btn-primary">Try It</button>
       </form>
@@ -1327,15 +1328,12 @@
   <footer class="footer">
     <div class="container">
       <p>Confer — Coming late 2026. Built with clarity in mind.</p>
-      <p id="commitLabel">Commit </p>
-    </div>
+      </div>
   </footer>
 
   <script>
 
-    const releaseSB = document.getElementById("releaseSubmitBtn")
-    releaseSB.addEventListener("click", () => verify())
-    
+
     function switchTab(btn, name) {
       document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -1452,13 +1450,6 @@ function openAndInject(htmlContent, jsCode) {
 
   return newWindow;
 }
-
-fetch('https://api.github.com/repos/ItsMeh1/confer/commits?per_page=1')
-  .then(result => result.json())
-  .then(result => {
-    document.getElementById('commitLabel').innerHTML = "Latest Commit: " + result[0].commit.message
-  })
-
 
       class Particle {
         constructor() {
