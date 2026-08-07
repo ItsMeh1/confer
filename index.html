@@ -1376,7 +1376,7 @@
         mouse.y = null;
       });
 
-function showToast(msg) {
+window.showToast = function(msg) {
   let t = document.getElementById('landing-toast');
   if (!t) {
     t = document.createElement('div');
@@ -1393,7 +1393,7 @@ function showToast(msg) {
   }, 2500);
 }
 
-async function verify() {
+window.verify = async function() {
   const input = document.getElementById('precode');
   const code = input.value.trim().toUpperCase();
 
@@ -1427,7 +1427,7 @@ async function verify() {
 }
 
 
-function openAndInject(htmlContent, jsCode) {
+window.openAndInject = function(htmlContent, jsCode) {
   // Open a new about:blank window
   const newWindow = window.open('about:blank', '_blank');
   
