@@ -25,17 +25,17 @@
   .brand-icon{width:64px;height:64px;border-radius:18px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;margin-bottom:4px}
   .landing-body h1{font-size:32px;font-weight:600;letter-spacing:-0.02em}
   .tagline{font-size:15px;color:var(--text-secondary);margin-bottom:8px}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:280px;padding:14px 20px;border-radius:12px;border:1px solid transparent;font-size:16px;font-weight:500;text-decoration:none;cursor:pointer;transition:all .15s ease;color:var(--text)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:280px;padding:14px 20px;border-radius:12px;border:1px solid transparent;font-size:16px;font-weight:500;text-decoration:none;cursor:pointer;transition:all .15s ease;color:var(--text);background:transparent}
   .btn:active{transform:scale(.97)}
   .btn-primary{background:var(--text);color:var(--bg)}
-  .btn-secondary{background:transparent;color:var(--text);border-color:var(--border)}
-  .btn-ghost{background:transparent;color:var(--text-tertiary);font-size:13px;padding:8px;width:auto;max-width:none}
+  .btn-secondary{color:var(--text);border-color:var(--border)}
+  .btn-ghost{color:var(--text-tertiary);font-size:13px;padding:8px;width:auto;max-width:none}
   .btn:hover{opacity:.85}
   .btn:disabled{opacity:.4;cursor:not-allowed}
   .auth-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;max-width:520px;margin:0 auto;width:100%}
   .auth-head{width:100%;position:relative;text-align:center;margin-bottom:4px}
   .auth-head h2{font-size:20px;font-weight:600}
-  .back-btn{position:absolute;left:0;top:50%;transform:translateY(-50%);color:var(--text-secondary);text-decoration:none;display:inline-flex;padding:6px;border-radius:10px;transition:background .15s ease}
+  .back-btn{position:absolute;left:0;top:50%;transform:translateY(-50%);color:var(--text-secondary);text-decoration:none;display:inline-flex;padding:6px;border-radius:10px;transition:background .15s ease;background:transparent;border:none;cursor:pointer}
   .back-btn:hover{background:var(--surface-raised)}
   .code-input{width:100%;padding:16px 18px;font-size:22px;font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:center;letter-spacing:.3em;text-transform:uppercase;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);caret-color:var(--text);outline:none;transition:border-color .15s ease}
   .code-input:focus{border-color:var(--text)}
@@ -59,8 +59,9 @@
   .tab-check:checked~.shell .app-body .messages-pane{display:flex}
   .video-pane{display:flex;flex-direction:column;flex:1;background:#000;position:relative}
   .video-stage{position:relative;flex:1;overflow:hidden;width:100%;height:100%}
-  #theirVideo{width:100%;height:100%;object-fit:cover;display:block;background:var(--surface-strong)}
-  #myVideo{position:absolute;bottom:16px;right:16px;width:28%;max-width:220px;min-width:110px;aspect-ratio:3/4;object-fit:cover;border-radius:14px;border:2px solid rgba(255,255,255,0.08);background:var(--surface-raised);box-shadow:0 8px 32px rgba(0,0,0,0.6)}
+  #video-grid{position:absolute;top:0;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px;padding:4px;overflow:auto}
+  #video-grid video{width:100%;height:100%;object-fit:cover;border-radius:8px;background:var(--surface-strong)}
+  #myVideo{position:absolute;bottom:16px;right:16px;width:28%;max-width:220px;min-width:110px;aspect-ratio:3/4;object-fit:cover;border-radius:14px;border:2px solid rgba(255,255,255,0.08);background:var(--surface-raised);box-shadow:0 8px 32px rgba(0,0,0,0.6);z-index:5}
   #screenPreview{position:absolute;top:12px;right:12px;width:35%;max-width:280px;min-width:140px;aspect-ratio:16/9;object-fit:cover;border-radius:12px;border:2px solid rgba(255,255,255,0.1);background:var(--surface-raised);box-shadow:0 8px 32px rgba(0,0,0,0.5);display:none;z-index:4}
   .screen-pip{position:absolute;top:12px;left:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 12px;border-radius:20px;font-size:12px;display:none;align-items:center;gap:6px;backdrop-filter:blur(8px);z-index:4}
   .screen-pip.active{display:flex}
@@ -121,6 +122,7 @@
   .overlay h3{color:var(--text);font-size:18px;font-weight:600}
   .toast{position:absolute;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--surface-raised);color:var(--text);padding:10px 18px;border-radius:10px;font-size:13px;border:1px solid var(--border);opacity:0;transition:all .3s ease;z-index:300;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .peer-list{position:absolute;top:12px;left:12px;background:rgba(0,0,0,0.5);color:#fff;padding:8px 12px;border-radius:10px;font-size:12px;z-index:4;backdrop-filter:blur(8px)}
 </style>
 <base target="_blank">
 </head>
@@ -131,35 +133,35 @@
   <section id="auth" class="page">
     <div class="auth-body">
       <div class="auth-head">
-        <a href="#" class="back-btn" onclick="goLanding();return false;" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></a>
+        <button class="back-btn" onclick="goLanding()" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
         <h2 id="auth-title">Setup</h2>
       </div>
       <div id="host-ui" style="display:none;width:100%;flex-direction:column;gap:12px;align-items:center;">
         <div id="room-code-display" class="code-input" style="cursor:text;user-select:all;font-size:26px;letter-spacing:.4em;"></div>
-        <p class="hint">Share this code with your guest. All messages are encrypted.</p>
-        <button id="btn-start-host" class="btn btn-primary" style="max-width:260px;">Allow camera &amp; Create offer</button>
-        <textarea id="host-offer" class="sdp-box" style="display:none;" readonly placeholder="Offer will appear here…"></textarea>
+        <p class="hint">Share this code for encryption. Each peer needs their own offer.</p>
+        <button id="btn-start-host" class="btn btn-primary" style="max-width:280px;">Allow camera &amp; Create offer</button>
+        <textarea id="host-offer" class="sdp-box" style="display:none;" readonly placeholder="Encoded offer will appear here…"></textarea>
         <div id="host-actions" style="display:none;gap:10px;width:100%;justify-content:center;flex-wrap:wrap;">
           <button id="btn-copy-offer" class="btn btn-secondary" style="max-width:160px;font-size:14px;padding:10px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy offer
           </button>
-          <a href="#main" id="btn-enter-host" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Enter room</a>
+          <button id="btn-enter-host" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Enter room</button>
         </div>
       </div>
       <div id="join-ui" style="display:none;width:100%;flex-direction:column;gap:12px;align-items:center;">
         <input id="join-code" class="code-input" type="text" placeholder="Enter room code" maxlength="8" autocomplete="off">
         <p class="hint">Enter the room code the host gave you.</p>
-        <button id="btn-start-join" class="btn btn-primary" style="max-width:260px;">Allow camera</button>
-        <textarea id="join-offer" class="sdp-box" style="display:none;" placeholder="Paste the host's offer here…"></textarea>
-        <button id="btn-verify" class="btn btn-primary" style="display:none;max-width:260px;">Generate answer</button>
-        <textarea id="join-answer" class="sdp-box" style="display:none;" readonly placeholder="Answer will appear here…"></textarea>
+        <button id="btn-start-join" class="btn btn-primary" style="max-width:280px;">Allow camera</button>
+        <textarea id="join-offer" class="sdp-box" style="display:none;" placeholder="Paste the host's encoded offer here…"></textarea>
+        <button id="btn-verify" class="btn btn-primary" style="display:none;max-width:280px;">Generate answer</button>
+        <textarea id="join-answer" class="sdp-box" style="display:none;" readonly placeholder="Encoded answer will appear here…"></textarea>
         <div id="join-actions" style="display:none;gap:10px;width:100%;justify-content:center;flex-wrap:wrap;">
           <button id="btn-copy-answer" class="btn btn-secondary" style="max-width:160px;font-size:14px;padding:10px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy answer
           </button>
-          <a href="#main" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Enter room</a>
+          <button id="btn-enter-join" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Enter room</button>
         </div>
       </div>
     </div>
@@ -169,7 +171,7 @@
     <input type="checkbox" id="tab-msg" class="tab-check">
     <div class="shell">
       <header class="app-header">
-        <a href="#" class="back-btn" onclick="endCall();goLanding();return false;" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></a>
+        <button class="back-btn" onclick="endCall();goLanding()" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
         <div class="call-info">
           <span id="call-title" class="call-title">Confer</span>
           <span id="call-timer" class="call-time">00:00</span>
@@ -191,10 +193,11 @@
       <div class="app-body" data-mode="merge">
         <div class="video-pane">
           <div class="video-stage">
-            <video id="theirVideo" autoplay playsinline></video>
+            <div id="video-grid"></div>
             <video id="myVideo" autoplay playsinline muted></video>
             <video id="screenPreview" autoplay playsinline muted></video>
             <div id="screen-indicator" class="screen-pip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Sharing screen</div>
+            <div id="peer-list" class="peer-list" style="display:none">Peers: 0</div>
           </div>
           <div class="call-controls">
             <button id="btn-mute" class="ctrl ctrl-mute" aria-label="Mute" onclick="toggleMute()">
@@ -211,6 +214,9 @@
             <button id="btn-screen" class="ctrl ctrl-screen" aria-label="Share screen" onclick="toggleScreen()">
               <svg id="icon-screen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <svg id="icon-screen-off" style="display:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </button>
+            <button id="btn-invite" class="ctrl ctrl-switch" aria-label="Invite peer" onclick="showInvite()" title="Create offer for new peer">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
             </button>
             <button id="btn-end" class="ctrl ctrl-end" aria-label="End call" onclick="endCall()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
@@ -243,10 +249,20 @@
       </div>
     </div>
     <div id="host-answer-overlay" class="overlay">
-      <h3>Paste joiner's answer</h3>
-      <p class="hint">The joiner has sent their answer. Paste it here to connect.</p>
-      <textarea id="host-answer-input" class="sdp-box" style="max-width:480px;height:160px;" placeholder="Paste answer here…"></textarea>
+      <h3>Paste peer's answer</h3>
+      <p class="hint">Paste the encoded answer from the peer who joined.</p>
+      <textarea id="host-answer-input" class="sdp-box" style="max-width:480px;height:120px;" placeholder="Paste encoded answer here…"></textarea>
       <button id="btn-accept-answer" class="btn btn-primary" style="max-width:480px;" onclick="acceptAnswer()">Accept &amp; Connect</button>
+    </div>
+    <div id="invite-overlay" class="overlay">
+      <h3>Invite another peer</h3>
+      <p class="hint">Create a new offer for an additional peer.</p>
+      <button id="btn-create-invite" class="btn btn-primary" style="max-width:280px;" onclick="createInvite()">Create offer</button>
+      <textarea id="invite-offer" class="sdp-box" style="display:none;max-width:480px;" readonly></textarea>
+      <div id="invite-actions" style="display:none;gap:10px;">
+        <button class="btn btn-secondary" style="max-width:160px;font-size:14px;padding:10px;" onclick="copyInvite()">Copy offer</button>
+        <button class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;" onclick="closeInvite()">Done</button>
+      </div>
     </div>
   </section>
 
@@ -256,7 +272,7 @@
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
       </div>
       <h1>Confer</h1>
-      <p class="tagline">Encrypted video calls and messaging.</p>
+      <p class="tagline">Encrypted group video calls and messaging.</p>
       <button id="btn-join" class="btn btn-primary" onclick="startJoin()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
         Join room
@@ -270,7 +286,7 @@
 </div>
 
 <script type="module">
-/* ===================== LanChat Module (verbatim) ===================== */
+/* ===================== LanChat Module (verbatim from upload) ===================== */
 class LanChat {
   constructor(options = {}) {
     this.options = {
@@ -278,23 +294,35 @@ class LanChat {
       iceServers: options.iceServers ?? [],
       ...options,
     };
-    this.pc = null; this.channel = null; this.role = "idle";
+    this.pc = null;
+    this.channel = null;
+    this.role = "idle";
     this.roomCode = this._makeRoomCode();
     this.localStream = new MediaStream();
     this.remoteStream = new MediaStream();
     this.screenStream = null;
-    this.localVideoElement = null; this.remoteVideoElement = null;
-    this._mediaSenders = new Map(); this._screenSenders = new Map();
-    this.lastOfferText = ""; this.lastAnswerText = ""; this.lastRemoteText = "";
+    this.localVideoElement = null;
+    this.remoteVideoElement = null;
+    this._mediaSenders = new Map();
+    this._screenSenders = new Map();
+    this.lastOfferText = "";
+    this.lastAnswerText = "";
+    this.lastRemoteText = "";
     this.lastMessage = "";
-    this.onmessage = null; this.onopen = null; this.onclose = null;
-    this.onerror = null; this.onstatechange = null;
-    this.onlocalstream = null; this.onremotestream = null;
-    this.onscreenstream = null; this.ontrack = null;
+    this.onmessage = null;
+    this.onopen = null;
+    this.onclose = null;
+    this.onerror = null;
+    this.onstatechange = null;
+    this.onlocalstream = null;
+    this.onremotestream = null;
+    this.onscreenstream = null;
+    this.ontrack = null;
   }
   get state() {
     return {
-      role: this.role, roomCode: this.roomCode,
+      role: this.role,
+      roomCode: this.roomCode,
       connectionState: this.pc?.connectionState ?? "idle",
       iceConnectionState: this.pc?.iceConnectionState ?? "idle",
       signalingState: this.pc?.signalingState ?? "idle",
@@ -302,20 +330,38 @@ class LanChat {
       localTracks: this.localStream?.getTracks?.().length ?? 0,
       remoteTracks: this.remoteStream?.getTracks?.().length ?? 0,
       screenTracks: this.screenStream?.getTracks?.().length ?? 0,
-      lastOfferText: this.lastOfferText, lastAnswerText: this.lastAnswerText,
-      lastRemoteText: this.lastRemoteText, lastMessage: this.lastMessage,
-      hasPeer: !!this.pc, hasChannel: !!this.channel,
+      lastOfferText: this.lastOfferText,
+      lastAnswerText: this.lastAnswerText,
+      lastRemoteText: this.lastRemoteText,
+      lastMessage: this.lastMessage,
+      hasPeer: !!this.pc,
+      hasChannel: !!this.channel,
     };
   }
-  get connected() { return this.channel?.readyState === "open"; }
-  get hasLocalAudio() { return this.localStream.getAudioTracks().length > 0; }
-  get hasLocalVideo() { return this.localStream.getVideoTracks().length > 0; }
-  get hasScreenShare() { return !!this.screenStream && this.screenStream.getVideoTracks().length > 0; }
-  _emit(name, value) { const fn = this[name]; if (typeof fn === "function") fn(value); }
+  get connected() {
+    return this.channel?.readyState === "open";
+  }
+  get hasLocalAudio() {
+    return this.localStream.getAudioTracks().length > 0;
+  }
+  get hasLocalVideo() {
+    return this.localStream.getVideoTracks().length > 0;
+  }
+  get hasScreenShare() {
+    return !!this.screenStream && this.screenStream.getVideoTracks().length > 0;
+  }
+  _emit(name, value) {
+    const fn = this[name];
+    if (typeof fn === "function") fn(value);
+  }
   _makeRoomCode(length = 6) {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const bytes = new Uint8Array(length); crypto.getRandomValues(bytes);
-    let out = ""; for (let i = 0; i < length; i++) out += chars[bytes[i] % chars.length];
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let out = "";
+    for (let i = 0; i < length; i++) {
+      out += chars[bytes[i] % chars.length];
+    }
     return out;
   }
   _makePeer() {
@@ -327,36 +373,74 @@ class LanChat {
       if (event.track && !this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
         this.remoteStream.addTrack(event.track);
       }
-      if (this.remoteVideoElement) this.remoteVideoElement.srcObject = this.remoteStream;
+      if (this.remoteVideoElement) {
+        this.remoteVideoElement.srcObject = this.remoteStream;
+      }
       this._emit("onremotestream", this.remoteStream);
-      this._emit("ontrack", { track: event.track, streams: event.streams, transceiver: event.transceiver });
+      this._emit("ontrack", {
+        track: event.track,
+        streams: event.streams,
+        transceiver: event.transceiver,
+      });
       this._emit("onstatechange", this.state);
     };
-    pc.ondatachannel = (event) => { this._attachChannel(event.channel); };
-    pc.onerror = (err) => { this._emit("onerror", err); };
+    pc.ondatachannel = (event) => {
+      this._attachChannel(event.channel);
+    };
+    pc.onerror = (err) => {
+      this._emit("onerror", err);
+    };
     return pc;
   }
   _attachChannel(channel) {
     this.channel = channel;
-    channel.onopen = () => { this._emit("onopen", this.state); this._emit("onstatechange", this.state); };
-    channel.onclose = () => { this._emit("onclose", this.state); this._emit("onstatechange", this.state); };
-    channel.onerror = (event) => { this._emit("onerror", event); };
-    channel.onmessage = (event) => { this.lastMessage = event.data; this._emit("onmessage", event.data); this._emit("onstatechange", this.state); };
+    channel.onopen = () => {
+      this._emit("onopen", this.state);
+      this._emit("onstatechange", this.state);
+    };
+    channel.onclose = () => {
+      this._emit("onclose", this.state);
+      this._emit("onstatechange", this.state);
+    };
+    channel.onerror = (event) => {
+      this._emit("onerror", event);
+    };
+    channel.onmessage = (event) => {
+      this.lastMessage = event.data;
+      this._emit("onmessage", event.data);
+      this._emit("onstatechange", this.state);
+    };
   }
-  _parseJSON(text) { if (!text || !String(text).trim()) throw new Error("Paste box is empty."); return JSON.parse(text); }
+  _parseJSON(text) {
+    if (!text || !String(text).trim()) {
+      throw new Error("Paste box is empty.");
+    }
+    return JSON.parse(text);
+  }
   async _waitForIceComplete() {
-    if (!this.pc) return; if (this.pc.iceGatheringState === "complete") return;
+    if (!this.pc) return;
+    if (this.pc.iceGatheringState === "complete") return;
     await new Promise((resolve) => {
-      const check = () => { if (this.pc?.iceGatheringState === "complete") { this.pc.removeEventListener("icegatheringstatechange", check); resolve(); } };
+      const check = () => {
+        if (this.pc?.iceGatheringState === "complete") {
+          this.pc.removeEventListener("icegatheringstatechange", check);
+          resolve();
+        }
+      };
       this.pc.addEventListener("icegatheringstatechange", check);
     });
   }
   _rememberLocalMedia(stream) {
     for (const track of stream.getTracks()) {
-      if (!this.localStream.getTracks().some((t) => t.id === track.id)) this.localStream.addTrack(track);
+      if (!this.localStream.getTracks().some((t) => t.id === track.id)) {
+        this.localStream.addTrack(track);
+      }
     }
-    if (this.localVideoElement) this.localVideoElement.srcObject = this.localStream;
-    this._emit("onlocalstream", this.localStream); this._emit("onstatechange", this.state);
+    if (this.localVideoElement) {
+      this.localVideoElement.srcObject = this.localStream;
+    }
+    this._emit("onlocalstream", this.localStream);
+    this._emit("onstatechange", this.state);
   }
   _syncLocalTracksToPeer() {
     if (!this.pc) return;
@@ -379,49 +463,103 @@ class LanChat {
     const senderMap = kindGroup === "screen" ? this._screenSenders : this._mediaSenders;
     const stream = kindGroup === "screen" ? this.screenStream : this.localStream;
     const sender = senderMap.get(trackId);
-    if (sender) { try { sender.replaceTrack(null); } catch {} senderMap.delete(trackId); }
+    if (sender) {
+      try {
+        sender.replaceTrack(null);
+      } catch {}
+      senderMap.delete(trackId);
+    }
     const track = stream?.getTracks?.().find((t) => t.id === trackId);
-    if (track) { try { stream.removeTrack(track); } catch {} try { track.stop(); } catch {} }
+    if (track) {
+      try {
+        stream.removeTrack(track);
+      } catch {}
+      try {
+        track.stop();
+      } catch {}
+    }
   }
   _toggleTracks(stream, kind, enabled) {
     if (!stream) return;
-    for (const track of stream.getTracks()) { if (track.kind === kind) track.enabled = enabled; }
+    for (const track of stream.getTracks()) {
+      if (track.kind === kind) track.enabled = enabled;
+    }
   }
   attachLocalVideo(element) {
     this.localVideoElement = element || null;
-    if (this.localVideoElement) this.localVideoElement.srcObject = this.localStream;
+    if (this.localVideoElement) {
+      this.localVideoElement.srcObject = this.localStream;
+    }
   }
   attachRemoteVideo(element) {
     this.remoteVideoElement = element || null;
-    if (this.remoteVideoElement) this.remoteVideoElement.srcObject = this.remoteStream;
+    if (this.remoteVideoElement) {
+      this.remoteVideoElement.srcObject = this.remoteStream;
+    }
   }
-  exportState() { return JSON.stringify(this.state, null, 2); }
-  resetRoomCode() { this.roomCode = this._makeRoomCode(); this._emit("onstatechange", this.state); return this.roomCode; }
+  exportState() {
+    return JSON.stringify(this.state, null, 2);
+  }
+  resetRoomCode() {
+    this.roomCode = this._makeRoomCode();
+    this._emit("onstatechange", this.state);
+    return this.roomCode;
+  }
   async enableMedia(constraints = { audio: true, video: true }) {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    this._rememberLocalMedia(stream); this._syncLocalTracksToPeer(); return stream;
+    this._rememberLocalMedia(stream);
+    this._syncLocalTracksToPeer();
+    return stream;
   }
-  async enableMicrophone() { return this.enableMedia({ audio: true, video: false }); }
-  async enableCamera() { return this.enableMedia({ audio: false, video: true }); }
+  async enableMicrophone() {
+    return this.enableMedia({ audio: true, video: false });
+  }
+  async enableCamera() {
+    return this.enableMedia({ audio: false, video: true });
+  }
   async disableMicrophone() {
     const tracks = this.localStream.getAudioTracks().slice();
-    for (const track of tracks) this._removeTrackById(track.id, "media");
-    this._emit("onlocalstream", this.localStream); this._emit("onstatechange", this.state);
+    for (const track of tracks) {
+      this._removeTrackById(track.id, "media");
+    }
+    this._emit("onlocalstream", this.localStream);
+    this._emit("onstatechange", this.state);
   }
   async disableCamera() {
     const tracks = this.localStream.getVideoTracks().slice();
-    for (const track of tracks) this._removeTrackById(track.id, "media");
-    this._emit("onlocalstream", this.localStream); this._emit("onstatechange", this.state);
+    for (const track of tracks) {
+      this._removeTrackById(track.id, "media");
+    }
+    this._emit("onlocalstream", this.localStream);
+    this._emit("onstatechange", this.state);
   }
-  muteMicrophone() { this._toggleTracks(this.localStream, "audio", false); this._emit("onstatechange", this.state); }
-  unmuteMicrophone() { this._toggleTracks(this.localStream, "audio", true); this._emit("onstatechange", this.state); }
-  muteCamera() { this._toggleTracks(this.localStream, "video", false); this._emit("onstatechange", this.state); }
-  unmuteCamera() { this._toggleTracks(this.localStream, "video", true); this._emit("onstatechange", this.state); }
+  muteMicrophone() {
+    this._toggleTracks(this.localStream, "audio", false);
+    this._emit("onstatechange", this.state);
+  }
+  unmuteMicrophone() {
+    this._toggleTracks(this.localStream, "audio", true);
+    this._emit("onstatechange", this.state);
+  }
+  muteCamera() {
+    this._toggleTracks(this.localStream, "video", false);
+    this._emit("onstatechange", this.state);
+  }
+  unmuteCamera() {
+    this._toggleTracks(this.localStream, "video", true);
+    this._emit("onstatechange", this.state);
+  }
   async shareScreen() {
-    if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Screen sharing is not supported in this browser.");
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      throw new Error("Screen sharing is not supported in this browser.");
+    }
     this.stopScreenShare();
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    this.screenStream = stream; this._emit("onscreenstream", this.screenStream);
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+    this.screenStream = stream;
+    this._emit("onscreenstream", this.screenStream);
     if (this.pc) {
       for (const track of stream.getTracks()) {
         if (!this._screenSenders.has(track.id)) {
@@ -430,60 +568,118 @@ class LanChat {
         }
       }
     }
-    stream.getVideoTracks()[0]?.addEventListener("ended", () => { this.stopScreenShare(); });
-    this._emit("onstatechange", this.state); return stream;
+    stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+      this.stopScreenShare();
+    });
+    this._emit("onstatechange", this.state);
+    return stream;
   }
   stopScreenShare() {
     if (!this.screenStream) return;
     const tracks = this.screenStream.getTracks().slice();
-    for (const track of tracks) this._removeTrackById(track.id, "screen");
-    this.screenStream = null; this._emit("onscreenstream", null); this._emit("onstatechange", this.state);
+    for (const track of tracks) {
+      this._removeTrackById(track.id, "screen");
+    }
+    this.screenStream = null;
+    this._emit("onscreenstream", null);
+    this._emit("onstatechange", this.state);
   }
   async host() {
-    this.close({ keepMedia: true }); this.role = "host"; this.pc = this._makePeer();
+    this.close({ keepMedia: true });
+    this.role = "host";
+    this.pc = this._makePeer();
     this.channel = this.pc.createDataChannel(this.options.channelName);
-    this._attachChannel(this.channel); this._syncLocalTracksToPeer();
+    this._attachChannel(this.channel);
+    this._syncLocalTracksToPeer();
     const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer); await this._waitForIceComplete();
+    await this.pc.setLocalDescription(offer);
+    await this._waitForIceComplete();
     this.lastOfferText = JSON.stringify(this.pc.localDescription, null, 2);
-    this._emit("onstatechange", this.state); return this.lastOfferText;
+    this._emit("onstatechange", this.state);
+    return this.lastOfferText;
   }
   async join(offerText) {
-    this.close({ keepMedia: true }); this.role = "join"; this.pc = this._makePeer();
-    const offer = this._parseJSON(offerText); await this.pc.setRemoteDescription(offer);
+    this.close({ keepMedia: true });
+    this.role = "join";
+    this.pc = this._makePeer();
+    const offer = this._parseJSON(offerText);
+    await this.pc.setRemoteDescription(offer);
     this._syncLocalTracksToPeer();
     const answer = await this.pc.createAnswer();
-    await this.pc.setLocalDescription(answer); await this._waitForIceComplete();
+    await this.pc.setLocalDescription(answer);
+    await this._waitForIceComplete();
     this.lastRemoteText = offerText;
     this.lastAnswerText = JSON.stringify(this.pc.localDescription, null, 2);
-    this._emit("onstatechange", this.state); return this.lastAnswerText;
+    this._emit("onstatechange", this.state);
+    return this.lastAnswerText;
   }
   async accept(answerText) {
     if (!this.pc) throw new Error("No peer connection yet.");
-    const answer = this._parseJSON(answerText); await this.pc.setRemoteDescription(answer);
-    this.lastRemoteText = answerText; this._emit("onstatechange", this.state);
+    const answer = this._parseJSON(answerText);
+    await this.pc.setRemoteDescription(answer);
+    this.lastRemoteText = answerText;
+    this._emit("onstatechange", this.state);
   }
   send(data) {
     if (!this.channel) throw new Error("No data channel yet.");
-    if (this.channel.readyState !== "open") throw new Error("Channel is not open yet.");
-    if (data instanceof Blob || data instanceof ArrayBuffer || ArrayBuffer.isView(data)) { this.channel.send(data); return; }
-    if (typeof data === "object" && data !== null) { this.channel.send(JSON.stringify(data)); return; }
+    if (this.channel.readyState !== "open") {
+      throw new Error("Channel is not open yet.");
+    }
+    if (
+      data instanceof Blob ||
+      data instanceof ArrayBuffer ||
+      ArrayBuffer.isView(data)
+    ) {
+      this.channel.send(data);
+      return;
+    }
+    if (typeof data === "object" && data !== null) {
+      this.channel.send(JSON.stringify(data));
+      return;
+    }
     this.channel.send(String(data));
   }
-  sendText(text) { this.send(String(text)); }
-  sendJSON(obj) { this.send(JSON.stringify(obj)); }
-  sendBinary(binary) { this.send(binary); }
-  async copyOfferText() { if (!navigator.clipboard) throw new Error("Clipboard API is not available."); await navigator.clipboard.writeText(this.lastOfferText); }
-  async copyAnswerText() { if (!navigator.clipboard) throw new Error("Clipboard API is not available."); await navigator.clipboard.writeText(this.lastAnswerText); }
+  sendText(text) {
+    this.send(String(text));
+  }
+  sendJSON(obj) {
+    this.send(JSON.stringify(obj));
+  }
+  sendBinary(binary) {
+    this.send(binary);
+  }
+  async copyOfferText() {
+    if (!navigator.clipboard) throw new Error("Clipboard API is not available.");
+    await navigator.clipboard.writeText(this.lastOfferText);
+  }
+  async copyAnswerText() {
+    if (!navigator.clipboard) throw new Error("Clipboard API is not available.");
+    await navigator.clipboard.writeText(this.lastAnswerText);
+  }
   close({ keepMedia = true } = {}) {
-    try { if (this.channel && this.channel.readyState !== "closed") this.channel.close(); } catch {}
-    try { if (this.pc) this.pc.close(); } catch {}
-    this.channel = null; this.pc = null; this.role = "idle";
-    this._mediaSenders.clear(); this._screenSenders.clear();
+    try {
+      if (this.channel && this.channel.readyState !== "closed") {
+        this.channel.close();
+      }
+    } catch {}
+    try {
+      if (this.pc) this.pc.close();
+    } catch {}
+    this.channel = null;
+    this.pc = null;
+    this.role = "idle";
+    this._mediaSenders.clear();
+    this._screenSenders.clear();
     if (!keepMedia) {
-      for (const track of this.localStream.getTracks().slice()) { try { track.stop(); } catch {} try { this.localStream.removeTrack(track); } catch {} }
+      for (const track of this.localStream.getTracks().slice()) {
+        try { track.stop(); } catch {}
+        try { this.localStream.removeTrack(track); } catch {}
+      }
       if (this.screenStream) {
-        for (const track of this.screenStream.getTracks().slice()) { try { track.stop(); } catch {} try { this.screenStream.removeTrack(track); } catch {} }
+        for (const track of this.screenStream.getTracks().slice()) {
+          try { track.stop(); } catch {}
+          try { this.screenStream.removeTrack(track); } catch {}
+        }
         this.screenStream = null;
       }
     }
@@ -542,8 +738,232 @@ async function parsePayload(buffer) {
   return { header, data: decrypted };
 }
 
+/* ===================== Base64 helpers ===================== */
+function toBase64(str) {
+  try {
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch (e) {
+    const bytes = new TextEncoder().encode(str);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+}
+function fromBase64(str) {
+  try {
+    return decodeURIComponent(escape(atob(str)));
+  } catch (e) {
+    const binary = atob(str);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+}
+function sanitizePaste(text) {
+  if (!text) return "";
+  text = text.replace(/```json\s*/g, "").replace(/```\s*$/g, "").replace(/```/g, "");
+  text = text.replace(/^﻿/, "");
+  text = text.replace(/[​-‍﻿]/g, "");
+  text = text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+  text = text.replace(/
+/g, "").replace(/
+/g, "").replace(/\s+/g, "");
+  return text.trim();
+}
+
+/* ===================== Mesh / Multi-party ===================== */
+class ConferMesh {
+  constructor() {
+    this.peers = new Map();
+    this.localStream = null;
+    this.screenStream = null;
+    this.roomCode = "";
+    this.isHost = false;
+    this.pendingAnswers = new Map();
+    this.onPeerMessage = null;
+    this.onPeerConnect = null;
+    this.onPeerDisconnect = null;
+    this.onPeerTrack = null;
+  }
+
+  createPeer(peerId, isHostSide) {
+    const lc = new LanChat({
+      channelName: "confer",
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }]
+    });
+    lc.attachLocalVideo(document.getElementById("myVideo"));
+
+    const remoteVideo = document.createElement("video");
+    remoteVideo.autoplay = true; remoteVideo.playsInline = true;
+    remoteVideo.id = "remote-" + peerId;
+    remoteVideo.style.width = "100%"; remoteVideo.style.height = "100%";
+    remoteVideo.style.objectFit = "cover"; remoteVideo.style.borderRadius = "8px";
+    document.getElementById("video-grid").appendChild(remoteVideo);
+    lc.attachRemoteVideo(remoteVideo);
+
+    lc.onopen = () => {
+      if (this.onPeerConnect) this.onPeerConnect(peerId);
+      this.broadcastPeerList();
+    };
+    lc.onclose = () => {
+      this.removePeer(peerId);
+      if (this.onPeerDisconnect) this.onPeerDisconnect(peerId);
+    };
+    lc.onerror = (e) => { console.error("Peer " + peerId + " error:", e); };
+    lc.onmessage = async (data) => {
+      if (typeof data === "string") {
+        try {
+          const cmd = JSON.parse(data);
+          if (cmd.type === "signal" && this.isHost) {
+            this.relaySignal(cmd.from, cmd.to, cmd.payload);
+          } else if (cmd.type === "peer-list") {
+            this.connectToPeers(cmd.peers);
+          }
+        } catch (e) {}
+        return;
+      }
+      if (data instanceof Blob) { data = await data.arrayBuffer(); }
+      if (data instanceof ArrayBuffer && this.onPeerMessage) {
+        this.onPeerMessage(peerId, data);
+      }
+    };
+
+    this.peers.set(peerId, { lc, remoteVideo, isHostSide });
+    return lc;
+  }
+
+  removePeer(peerId) {
+    const p = this.peers.get(peerId);
+    if (p) {
+      p.lc.close({ keepMedia: true });
+      if (p.remoteVideo && p.remoteVideo.parentNode) p.remoteVideo.parentNode.removeChild(p.remoteVideo);
+      this.peers.delete(peerId);
+    }
+    this.updatePeerCount();
+  }
+
+  updatePeerCount() {
+    const el = document.getElementById("peer-list");
+    if (el) { el.textContent = "Peers: " + this.peers.size; el.style.display = this.peers.size > 0 ? "flex" : "none"; }
+  }
+
+  async hostPeer() {
+    this.isHost = true;
+    const peerId = "peer-" + Date.now();
+    const lc = this.createPeer(peerId, true);
+    await lc.enableMedia({ audio: true, video: true });
+    const offer = await lc.host();
+    return { peerId, offer: toBase64(offer) };
+  }
+
+  async joinPeer(encodedOffer, roomCode) {
+    this.roomCode = roomCode;
+    const peerId = "host-" + Date.now();
+    const lc = this.createPeer(peerId, false);
+    await lc.enableMedia({ audio: true, video: true });
+    const offerText = fromBase64(sanitizePaste(encodedOffer));
+    const answer = await lc.join(offerText);
+    return { peerId, answer: toBase64(answer) };
+  }
+
+  async acceptAnswer(peerId, encodedAnswer) {
+    const p = this.peers.get(peerId);
+    if (!p) throw new Error("Peer not found");
+    const answerText = fromBase64(sanitizePaste(encodedAnswer));
+    await p.lc.accept(answerText);
+  }
+
+  relaySignal(fromPeer, toPeer, payload) {
+    for (const [id, p] of this.peers) {
+      if (id !== fromPeer && p.lc.connected) {
+        p.lc.sendJSON({ type: "signal", from: fromPeer, to: toPeer, payload });
+      }
+    }
+  }
+
+  broadcastPeerList() {
+    if (!this.isHost) return;
+    const peerIds = Array.from(this.peers.keys());
+    for (const [id, p] of this.peers) {
+      if (p.lc.connected) {
+        p.lc.sendJSON({ type: "peer-list", peers: peerIds.filter((x) => x !== id) });
+      }
+    }
+  }
+
+  connectToPeers(peerIds) {
+    // Guests auto-connect to other peers via host relay
+  }
+
+  broadcast(data) {
+    for (const [id, p] of this.peers) {
+      if (p.lc.connected) {
+        try { p.lc.sendBinary(data); } catch (e) {}
+      }
+    }
+  }
+
+  broadcastText(text) {
+    for (const [id, p] of this.peers) {
+      if (p.lc.connected) {
+        try { p.lc.sendText(text); } catch (e) {}
+      }
+    }
+  }
+
+  async addScreenToAll(stream) {
+    for (const [id, p] of this.peers) {
+      if (p.lc.pc && p.lc.pc.connectionState !== "closed") {
+        for (const track of stream.getTracks()) {
+          try {
+            const sender = p.lc.pc.addTrack(track, stream);
+            p.lc._screenSenders.set(track.id, sender);
+          } catch (e) {}
+        }
+      }
+    }
+  }
+
+  stopScreenAll() {
+    for (const [id, p] of this.peers) {
+      const tracks = p.lc.screenStream ? p.lc.screenStream.getTracks().slice() : [];
+      for (const track of tracks) p.lc._removeTrackById(track.id, "screen");
+      p.lc.screenStream = null;
+    }
+  }
+
+  replaceCameraTrack(newTrack) {
+    for (const [id, p] of this.peers) {
+      for (const sender of p.lc.pc.getSenders()) {
+        if (sender.track && sender.track.kind === "video") {
+          try { sender.replaceTrack(newTrack); } catch (e) {}
+        }
+      }
+    }
+  }
+
+  muteAllAudio(muted) {
+    for (const [id, p] of this.peers) {
+      if (muted) p.lc.muteMicrophone(); else p.lc.unmuteMicrophone();
+    }
+  }
+
+  muteAllVideo(muted) {
+    for (const [id, p] of this.peers) {
+      if (muted) p.lc.muteCamera(); else p.lc.unmuteCamera();
+    }
+  }
+
+  closeAll() {
+    for (const [id, p] of this.peers) p.lc.close({ keepMedia: false });
+    this.peers.clear();
+    document.getElementById("video-grid").innerHTML = "";
+    this.updatePeerCount();
+  }
+}
+
 /* ===================== App ===================== */
-let lc = null;
+let mesh = null;
 let cryptoKey = null;
 let callStart = null;
 let timerId = null;
@@ -552,6 +972,7 @@ let isCamOff = false;
 let isScreenOn = false;
 let cameraDevices = [];
 let cameraIndex = 0;
+let currentHostPeerId = null;
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -559,7 +980,7 @@ const $$ = (s) => document.querySelectorAll(s);
 function showToast(msg) {
   const t = $("#toast");
   t.textContent = msg; t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 2500);
+  setTimeout(() => t.classList.remove("show"), 3000);
 }
 
 function formatTime(d) {
@@ -601,24 +1022,17 @@ function addFileMessage(name, url, mime, isOut) {
   div.appendChild(bubble); list.appendChild(div); list.scrollTop = list.scrollHeight;
 }
 
-function initLC() {
-  if (lc) lc.close({ keepMedia: false });
-  lc = new LanChat({
-    channelName: "confer",
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }]
-  });
-  lc.attachLocalVideo($("#myVideo"));
-  lc.attachRemoteVideo($("#theirVideo"));
-  lc.onopen = () => {
-    addMessage("Connected securely", false, true);
+function initMesh() {
+  if (mesh) mesh.closeAll();
+  mesh = new ConferMesh();
+  mesh.onPeerConnect = (id) => {
+    addMessage("Peer connected", false, true);
     if (!callStart) { callStart = Date.now(); timerId = setInterval(updateTimer, 1000); }
   };
-  lc.onclose = () => { addMessage("Disconnected", false, true); stopTimer(); };
-  lc.onerror = (e) => { console.error(e); addMessage("Error: " + (e.message || e), false, true); };
-  lc.onmessage = async (data) => {
-    if (typeof data === "string") { addMessage(data, false); return; }
-    if (data instanceof Blob) { data = await data.arrayBuffer(); }
-    if (!(data instanceof ArrayBuffer)) return;
+  mesh.onPeerDisconnect = (id) => {
+    addMessage("Peer disconnected", false, true);
+  };
+  mesh.onPeerMessage = async (peerId, data) => {
     try {
       const { header, data: decrypted } = await parsePayload(data);
       if (header.t === "msg") { addMessage(new TextDecoder().decode(decrypted), false); }
@@ -626,12 +1040,7 @@ function initLC() {
         const blob = new Blob([decrypted], { type: header.mime || "application/octet-stream" });
         addFileMessage(header.name, URL.createObjectURL(blob), header.mime, false);
       }
-    } catch (e) { console.error("Decrypt failed", e); addMessage("Received encrypted data (decrypt failed)", false, true); }
-  };
-  lc.onscreenstream = (stream) => {
-    const el = $("#screenPreview");
-    if (el && stream) { el.srcObject = stream; el.style.display = "block"; $("#screen-indicator").classList.add("active"); }
-    else if (el) { el.srcObject = null; el.style.display = "none"; $("#screen-indicator").classList.remove("active"); }
+    } catch (e) { console.error("Decrypt failed", e); }
   };
 }
 
@@ -662,9 +1071,9 @@ function route() {
       $("#auth-title").textContent = "Host room";
       $("#host-ui").style.display = "flex";
       $("#join-ui").style.display = "none";
-      if (!lc || lc.role !== "host") { initLC(); }
-      $("#room-code-display").textContent = lc.roomCode;
-      setupCrypto(lc.roomCode);
+      if (!mesh) initMesh();
+      $("#room-code-display").textContent = mesh.roomCode || (mesh.roomCode = new LanChat().roomCode);
+      setupCrypto(mesh.roomCode);
     } else if (mode === "join") {
       $("#auth-title").textContent = "Join room";
       $("#host-ui").style.display = "none";
@@ -672,10 +1081,6 @@ function route() {
     } else {
       location.hash = "";
     }
-  } else if (hash === "#main") {
-    // main page shown via CSS :target
-  } else {
-    // landing
   }
 }
 
@@ -695,78 +1100,93 @@ window.addEventListener("hashchange", route);
 /* Auth flow */
 $("#btn-start-host").addEventListener("click", async () => {
   try {
-    await lc.enableMedia({ audio: true, video: true });
-    await enumerateCameras();
-    const offer = await lc.host();
+    const { peerId, offer } = await mesh.hostPeer();
+    currentHostPeerId = peerId;
     $("#host-offer").style.display = "block";
     $("#host-offer").value = offer;
     $("#btn-start-host").style.display = "none";
     $("#host-actions").style.display = "flex";
-    showToast("Offer created. Copy it to the joiner.");
-  } catch (e) { showToast(e.message || "Failed to start host"); }
+    showToast("Offer created. Copy it to peer.");
+  } catch (e) { showToast(e.message || "Failed to start host"); console.error(e); }
 });
 
 $("#btn-copy-offer").addEventListener("click", async () => {
-  try { await lc.copyOfferText(); showToast("Offer copied!"); } catch (e) { $("#host-offer").select(); document.execCommand("copy"); showToast("Offer copied!"); }
+  const text = $("#host-offer").value;
+  try { await navigator.clipboard.writeText(text); showToast("Offer copied!"); }
+  catch (e) { $("#host-offer").select(); document.execCommand("copy"); showToast("Offer copied!"); }
+});
+
+$("#btn-enter-host").addEventListener("click", () => {
+  $("#call-title").textContent = "Room " + mesh.roomCode;
+  $("#host-answer-overlay").classList.add("active");
 });
 
 $("#btn-start-join").addEventListener("click", async () => {
   const code = $("#join-code").value.trim().toUpperCase();
   if (!code) { showToast("Enter room code first"); return; }
   try {
-    initLC();
+    initMesh();
+    mesh.roomCode = code;
     await setupCrypto(code);
-    await lc.enableMedia({ audio: true, video: true });
-    await enumerateCameras();
+    await mesh.peers.get(mesh.peers.keys().next().value)?.lc?.enableMedia({ audio: true, video: true });
     $("#join-offer").style.display = "block";
     $("#btn-verify").style.display = "inline-flex";
     $("#btn-start-join").style.display = "none";
-    showToast("Camera ready. Paste the offer.");
+    showToast("Camera ready. Paste the encoded offer.");
   } catch (e) { showToast(e.message || "Camera failed"); }
 });
 
 $("#btn-verify").addEventListener("click", async () => {
   const offer = $("#join-offer").value.trim();
-  if (!offer) { showToast("Paste the host's offer"); return; }
+  if (!offer) { showToast("Paste the host's encoded offer"); return; }
   try {
-    const answer = await lc.join(offer);
+    const code = $("#join-code").value.trim().toUpperCase();
+    const { peerId, answer } = await mesh.joinPeer(offer, code);
     $("#join-answer").style.display = "block";
     $("#join-answer").value = answer;
     $("#join-actions").style.display = "flex";
     $("#btn-verify").style.display = "none";
     showToast("Answer generated. Copy it to the host.");
-  } catch (e) { showToast(e.message || "Invalid offer"); }
+  } catch (e) {
+    console.error(e);
+    showToast("Error: " + (e.message || "Invalid offer").substring(0, 60));
+  }
 });
 
 $("#btn-copy-answer").addEventListener("click", async () => {
-  try { await lc.copyAnswerText(); showToast("Answer copied!"); } catch (e) { $("#join-answer").select(); document.execCommand("copy"); showToast("Answer copied!"); }
+  const text = $("#join-answer").value;
+  try { await navigator.clipboard.writeText(text); showToast("Answer copied!"); }
+  catch (e) { $("#join-answer").select(); document.execCommand("copy"); showToast("Answer copied!"); }
+});
+
+$("#btn-enter-join").addEventListener("click", () => {
+  $("#call-title").textContent = "Room " + mesh.roomCode;
 });
 
 window.acceptAnswer = async () => {
   const answer = $("#host-answer-input").value.trim();
   if (!answer) { showToast("Paste the answer first"); return; }
-  try { await lc.accept(answer); $("#host-answer-overlay").classList.remove("active"); showToast("Connected!"); }
-  catch (e) { showToast(e.message || "Invalid answer"); }
+  try {
+    await mesh.acceptAnswer(currentHostPeerId, answer);
+    $("#host-answer-overlay").classList.remove("active");
+    $("#host-answer-input").value = "";
+    showToast("Connected!");
+  } catch (e) { showToast("Error: " + (e.message || "Invalid answer").substring(0, 60)); }
 };
-
-$("#btn-enter-host").addEventListener("click", () => {
-  $("#call-title").textContent = "Room " + lc.roomCode;
-  if (lc.lastOfferText && !lc.connected) { $("#host-answer-overlay").classList.add("active"); }
-});
 
 /* Main controls */
 window.toggleMute = () => {
-  if (!lc) return;
+  if (!mesh) return;
   isMuted = !isMuted;
-  if (isMuted) lc.muteMicrophone(); else lc.unmuteMicrophone();
+  mesh.muteAllAudio(isMuted);
   $("#icon-mic").style.display = isMuted ? "none" : "block";
   $("#icon-mic-off").style.display = isMuted ? "block" : "none";
 };
 
 window.toggleCamera = () => {
-  if (!lc) return;
+  if (!mesh) return;
   isCamOff = !isCamOff;
-  if (isCamOff) lc.muteCamera(); else lc.unmuteCamera();
+  mesh.muteAllVideo(isCamOff);
   $("#icon-cam").style.display = isCamOff ? "none" : "block";
   $("#icon-cam-off").style.display = isCamOff ? "block" : "none";
 };
@@ -780,22 +1200,37 @@ async function enumerateCameras() {
 }
 
 window.switchCamera = async () => {
-  if (!lc || cameraDevices.length < 2) { showToast("No other camera found"); return; }
+  if (!mesh || cameraDevices.length < 2) { showToast("No other camera found"); return; }
   cameraIndex = (cameraIndex + 1) % cameraDevices.length;
   const device = cameraDevices[cameraIndex];
   try {
-    await lc.disableCamera();
-    await lc.enableMedia({ audio: false, video: { deviceId: { exact: device.deviceId } } });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { deviceId: { exact: device.deviceId } } });
+    const newTrack = stream.getVideoTracks()[0];
+    mesh.replaceCameraTrack(newTrack);
     showToast("Switched camera");
   } catch (e) { showToast("Switch failed"); }
 };
 
 window.toggleScreen = async () => {
-  if (!lc) return;
-  if (isScreenOn) { lc.stopScreenShare(); isScreenOn = false; }
-  else {
-    try { await lc.shareScreen(); isScreenOn = true; showToast("Screen sharing started"); }
-    catch (e) { showToast(e.message || "Screen share failed"); }
+  if (!mesh) return;
+  if (isScreenOn) {
+    mesh.stopScreenAll();
+    $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
+    isScreenOn = false;
+  } else {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      $("#screenPreview").srcObject = stream; $("#screenPreview").style.display = "block";
+      $("#screen-indicator").classList.add("active");
+      await mesh.addScreenToAll(stream);
+      isScreenOn = true;
+      showToast("Screen sharing started");
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        mesh.stopScreenAll(); $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
+        isScreenOn = false; $("#btn-screen").classList.remove("active");
+        $("#icon-screen").style.display = "block"; $("#icon-screen-off").style.display = "none";
+      });
+    } catch (e) { showToast(e.message || "Screen share failed"); }
   }
   $("#btn-screen").classList.toggle("active", isScreenOn);
   $("#icon-screen").style.display = isScreenOn ? "none" : "block";
@@ -804,15 +1239,21 @@ window.toggleScreen = async () => {
 
 window.endCall = () => {
   stopTimer();
-  if (lc) { lc.close({ keepMedia: false }); lc = null; }
+  if (mesh) { mesh.closeAll(); mesh = null; }
   $("#msg-list").innerHTML = "";
   $("#host-answer-overlay").classList.remove("active");
+  $("#invite-overlay").classList.remove("active");
   isMuted = false; isCamOff = false; isScreenOn = false;
   $("#icon-mic").style.display = "block"; $("#icon-mic-off").style.display = "none";
   $("#icon-cam").style.display = "block"; $("#icon-cam-off").style.display = "none";
   $("#icon-screen").style.display = "block"; $("#icon-screen-off").style.display = "none";
   $("#btn-screen").classList.remove("active");
   $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
+  $("#host-offer").style.display = "none"; $("#host-offer").value = "";
+  $("#host-actions").style.display = "none"; $("#btn-start-host").style.display = "inline-flex";
+  $("#join-offer").style.display = "none"; $("#join-answer").style.display = "none";
+  $("#join-actions").style.display = "none"; $("#btn-verify").style.display = "none";
+  $("#btn-start-join").style.display = "inline-flex";
 };
 
 /* Messaging & Files */
@@ -820,10 +1261,10 @@ window.sendMessage = async () => {
   const input = $("#input-message");
   const text = input.value.trim();
   if (!text) return;
-  if (!lc || !lc.connected) { showToast("Not connected yet"); return; }
+  if (!mesh || mesh.peers.size === 0) { showToast("Not connected yet"); return; }
   try {
     const payload = await buildPayload({ t: "msg" }, text);
-    lc.sendBinary(payload);
+    mesh.broadcast(payload);
     addMessage(text, true);
     input.value = "";
   } catch (e) { showToast("Send failed"); }
@@ -832,19 +1273,50 @@ window.sendMessage = async () => {
 window.onFileSelected = async (input) => {
   const file = input.files[0];
   if (!file) return;
-  if (!lc || !lc.connected) { showToast("Not connected yet"); return; }
+  if (!mesh || mesh.peers.size === 0) { showToast("Not connected yet"); return; }
   try {
     const buf = await file.arrayBuffer();
     const payload = await buildPayload({ t: "file", name: file.name, mime: file.type }, buf);
-    lc.sendBinary(payload);
+    mesh.broadcast(payload);
     addMessage("Sent: " + file.name, true, true);
   } catch (e) { showToast("File send failed"); }
   input.value = "";
 };
 
+/* Invite overlay */
+window.showInvite = () => {
+  if (!mesh || !mesh.isHost) { showToast("Only host can invite"); return; }
+  $("#invite-overlay").classList.add("active");
+  $("#invite-offer").style.display = "none";
+  $("#invite-offer").value = "";
+  $("#invite-actions").style.display = "none";
+  $("#btn-create-invite").style.display = "inline-flex";
+};
+
+window.createInvite = async () => {
+  try {
+    const { peerId, offer } = await mesh.hostPeer();
+    currentHostPeerId = peerId;
+    $("#invite-offer").style.display = "block";
+    $("#invite-offer").value = offer;
+    $("#btn-create-invite").style.display = "none";
+    $("#invite-actions").style.display = "flex";
+  } catch (e) { showToast(e.message || "Failed"); }
+};
+
+window.copyInvite = async () => {
+  const text = $("#invite-offer").value;
+  try { await navigator.clipboard.writeText(text); showToast("Copied!"); }
+  catch (e) { $("#invite-offer").select(); document.execCommand("copy"); showToast("Copied!"); }
+};
+
+window.closeInvite = () => {
+  $("#invite-overlay").classList.remove("active");
+};
+
 /* Init */
 route();
-if (location.hash === "#main" && !lc) { location.hash = ""; }
+if (location.hash === "#main" && !mesh) { location.hash = ""; }
 </script>
 </body>
 </html>
