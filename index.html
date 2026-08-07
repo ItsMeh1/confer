@@ -1452,7 +1452,7 @@ function openAndInject(htmlContent, jsCode) {
 fetch('https://api.github.com/repos/ItsMeh1/confer/commits?per_page=1')
   .then(result => result.json())
   .then(result => {
-    document.getElementById('commitLabel').innerHTML = "Latest Commit: "result[0].commit.message
+    document.getElementById('commitLabel').innerHTML = "Latest Commit: " + result[0].commit.message
   })
 
 
