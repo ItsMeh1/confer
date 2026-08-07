@@ -1040,7 +1040,7 @@
       <p>Confer is a clean, reliable video platform built for teams and individuals. No installs. No clutter.</p>
       <form class="hero-form" onsubmit="event.preventDefault();">
         <input type="text" id="precode" placeholder="Enter your pre-release code..." required>
-        <button type="submit"  onclick="verify()" class="btn btn-primary">Try It</button>
+        <button type="submit" id="releaseSubmitBtn" class="btn btn-primary">Try It</button>
       </form>
     </div>
   </section>
@@ -1332,6 +1332,10 @@
   </footer>
 
   <script>
+
+    const releaseSB = document.getElementById("releaseSubmitBtn")
+    releaseSB.addEventListener("click", () => verify())
+    
     function switchTab(btn, name) {
       document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
