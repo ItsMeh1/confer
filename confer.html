@@ -81,6 +81,10 @@
   .msg-out .bubble{background:var(--text);color:var(--bg);border-bottom-right-radius:4px}
   .msg-system{justify-content:center}
   .msg-system .bubble{background:transparent;color:var(--text-tertiary);font-size:12px;max-width:100%;padding:4px 8px}
+  .system-notice{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface-raised);color:var(--text-secondary);font-size:12px}
+  .system-notice svg{width:15px;height:15px;flex-shrink:0}
+  .system-notice.join{border-color:rgba(52,199,89,.35);color:#8ee5a8}
+  .system-notice.leave{border-color:rgba(220,68,70,.35);color:#f09a9b}
   .msg-input-bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border)}
   .msg-input{flex:1;padding:11px 16px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;outline:none;transition:border-color .15s ease}
   .msg-input:focus{border-color:var(--text-secondary)}
@@ -123,6 +127,17 @@
   .toast{position:absolute;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--surface-raised);color:var(--text);padding:10px 18px;border-radius:10px;font-size:13px;border:1px solid var(--border);opacity:0;transition:all .3s ease;z-index:300;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .peer-list{position:absolute;top:12px;left:12px;background:rgba(0,0,0,0.5);color:#fff;padding:8px 12px;border-radius:10px;font-size:12px;z-index:4;backdrop-filter:blur(8px)}
+  .local-media-off{position:absolute;bottom:16px;right:16px;width:28%;max-width:220px;min-width:110px;aspect-ratio:3/4;border-radius:14px;border:2px solid rgba(255,255,255,.08);background:var(--surface-raised);box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-secondary);font-size:12px;text-align:center;padding:12px}
+  .local-media-off svg{color:var(--text-tertiary)}
+  .local-media-off.hidden,.media-status-badge.hidden{display:none}
+  .media-status-badge{position:absolute;right:16px;bottom:88px;z-index:7;display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:rgba(20,20,23,.9);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;backdrop-filter:blur(8px)}
+  .remote-tile{position:relative;min-height:0;background:var(--surface-strong);border-radius:8px;overflow:hidden}
+  .remote-tile video{position:absolute;inset:0}
+  .remote-media-off{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--surface-raised);color:var(--text-secondary);font-size:13px;text-align:center}
+  .remote-media-off.hidden{display:none}
+  .remote-audio-badge{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:5px;padding:6px 8px;border:1px solid var(--border);border-radius:999px;background:rgba(20,20,23,.9);color:var(--text-secondary);font-size:11px;backdrop-filter:blur(8px)}
+  .remote-audio-badge.hidden{display:none}
+  @media(min-width:768px){.local-media-off{width:22%;max-width:260px;min-width:150px;bottom:24px;right:24px;border-radius:16px}.media-status-badge{right:24px;bottom:100px}}
 </style>
 <base target="_blank">
 </head>
@@ -195,6 +210,14 @@
           <div class="video-stage">
             <div id="video-grid"></div>
             <video id="myVideo" autoplay playsinline muted></video>
+            <div id="local-camera-off" class="local-media-off" role="status">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              <span>Camera off</span>
+            </div>
+            <div id="local-audio-off" class="media-status-badge" role="status">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v6a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/></svg>
+              <span>Microphone off</span>
+            </div>
             <video id="screenPreview" autoplay playsinline muted></video>
             <div id="screen-indicator" class="screen-pip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Sharing screen</div>
             <div id="peer-list" class="peer-list" style="display:none">Peers: 0</div>
@@ -835,16 +858,28 @@ class ConferMesh {
     });
     lc.attachLocalVideo(document.getElementById("myVideo"));
 
+    const remoteTile = document.createElement("div");
+    remoteTile.className = "remote-tile";
     const remoteVideo = document.createElement("video");
     remoteVideo.autoplay = true; remoteVideo.playsInline = true;
     remoteVideo.id = "remote-" + peerId;
     remoteVideo.style.width = "100%"; remoteVideo.style.height = "100%";
     remoteVideo.style.objectFit = "cover"; remoteVideo.style.borderRadius = "8px";
-    document.getElementById("video-grid").appendChild(remoteVideo);
+    const remoteStatus = document.createElement("div");
+    remoteStatus.className = "remote-media-off";
+    remoteStatus.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span>Camera off</span>';
+    const remoteAudioStatus = document.createElement("div");
+    remoteAudioStatus.className = "remote-audio-badge";
+    remoteAudioStatus.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v6a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/></svg><span>Mic off</span>';
+    remoteTile.appendChild(remoteVideo);
+    remoteTile.appendChild(remoteStatus);
+    remoteTile.appendChild(remoteAudioStatus);
+    document.getElementById("video-grid").appendChild(remoteTile);
     lc.attachRemoteVideo(remoteVideo);
 
     lc.onopen = () => {
       this.updatePeerCount();
+      this.broadcastMediaStatus();
       if (this.onPeerConnect) this.onPeerConnect(peerId);
       this.broadcastPeerList();
     };
@@ -861,6 +896,8 @@ class ConferMesh {
             this.relaySignal(cmd.from, cmd.to, cmd.payload);
           } else if (cmd.type === "peer-list") {
             this.connectToPeers(cmd.peers);
+          } else if (cmd.type === "media-status") {
+            this.updateRemoteMediaStatus(peerId, cmd);
           }
         } catch (e) {}
         return;
@@ -871,7 +908,7 @@ class ConferMesh {
       }
     };
 
-    this.peers.set(peerId, { lc, remoteVideo, isHostSide });
+    this.peers.set(peerId, { lc, remoteVideo, remoteTile, remoteStatus, remoteAudioStatus, isHostSide });
     lc._syncLocalTracksToPeer().catch(() => {});
     return lc;
   }
@@ -880,7 +917,7 @@ class ConferMesh {
     const p = this.peers.get(peerId);
     if (p) {
       p.lc.close({ keepMedia: true });
-      if (p.remoteVideo && p.remoteVideo.parentNode) p.remoteVideo.parentNode.removeChild(p.remoteVideo);
+      if (p.remoteTile && p.remoteTile.parentNode) p.remoteTile.parentNode.removeChild(p.remoteTile);
       this.peers.delete(peerId);
     }
     this.updatePeerCount();
@@ -889,6 +926,23 @@ class ConferMesh {
   updatePeerCount() {
     const el = document.getElementById("peer-list");
     if (el) { el.textContent = "Peers: " + this.peers.size; el.style.display = this.peers.size > 0 ? "flex" : "none"; }
+  }
+
+  broadcastMediaStatus() {
+    const cameraOn = !!this.localStream.getVideoTracks()[0];
+    const microphoneOn = !!this.localStream.getAudioTracks()[0];
+    for (const { lc } of this.peers.values()) {
+      if (lc.connected) {
+        try { lc.sendJSON({ type: "media-status", cameraOn, microphoneOn }); } catch (e) {}
+      }
+    }
+  }
+
+  updateRemoteMediaStatus(peerId, status) {
+    const peer = this.peers.get(peerId);
+    if (!peer?.remoteStatus) return;
+    peer.remoteStatus.classList.toggle("hidden", !!status.cameraOn);
+    peer.remoteAudioStatus?.classList.toggle("hidden", !!status.microphoneOn);
   }
 
   async hostPeer() {
@@ -978,6 +1032,7 @@ class ConferMesh {
     const track = stream.getAudioTracks()[0];
     if (track) this.localStream.addTrack(track);
     await this.syncMedia();
+    this.broadcastMediaStatus();
   }
 
   async disableMicrophone() {
@@ -986,6 +1041,7 @@ class ConferMesh {
       track.stop();
     }
     await this.syncMedia();
+    this.broadcastMediaStatus();
   }
 
   async enableCamera(constraints = true) {
@@ -995,6 +1051,7 @@ class ConferMesh {
     if (track) this.localStream.addTrack(track);
     this._refreshLocalPreview();
     await this.syncMedia();
+    this.broadcastMediaStatus();
   }
 
   async disableCamera() {
@@ -1004,6 +1061,7 @@ class ConferMesh {
     }
     this._refreshLocalPreview();
     await this.syncMedia();
+    this.broadcastMediaStatus();
   }
 
   async switchCamera(deviceId) {
@@ -1108,6 +1166,28 @@ function addMessage(text, isOut, isSystem) {
   list.scrollTop = list.scrollHeight;
 }
 
+function addCallNotice(text, type) {
+  const list = $("#msg-list");
+  const div = document.createElement("div");
+  div.className = "msg msg-system";
+  const notice = document.createElement("div");
+  notice.className = "system-notice " + type;
+  const icon = type === "join"
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="8"/></svg>';
+  notice.innerHTML = icon;
+  const label = document.createElement("span");
+  label.textContent = text;
+  notice.appendChild(label);
+  div.appendChild(notice); list.appendChild(div); list.scrollTop = list.scrollHeight;
+}
+
+function updateLocalMediaIndicators() {
+  $("#local-camera-off").classList.toggle("hidden", !isCamOff);
+  $("#local-audio-off").classList.toggle("hidden", !isMuted);
+  $("#myVideo").style.display = isCamOff ? "none" : "block";
+}
+
 function addFileMessage(name, url, mime, isOut) {
   const list = $("#msg-list");
   const div = document.createElement("div");
@@ -1128,11 +1208,11 @@ function initMesh() {
   if (mesh) mesh.closeAll();
   mesh = new ConferMesh();
   mesh.onPeerConnect = (id) => {
-    addMessage("Peer connected", false, true);
+    addCallNotice("A peer joined the call", "join");
     if (!callStart) { callStart = Date.now(); timerId = setInterval(updateTimer, 1000); }
   };
   mesh.onPeerDisconnect = (id) => {
-    addMessage("Peer disconnected", false, true);
+    addCallNotice("A peer left the call", "leave");
   };
   mesh.onPeerMessage = async (peerId, data) => {
     try {
@@ -1292,6 +1372,7 @@ window.toggleMute = async () => {
     $("#btn-mute").setAttribute("aria-label", isMuted ? "Enable microphone" : "Disable microphone");
     $("#icon-mic").style.display = isMuted ? "none" : "block";
     $("#icon-mic-off").style.display = isMuted ? "block" : "none";
+    updateLocalMediaIndicators();
   } catch (e) { showToast(e.message || "Microphone unavailable"); }
 };
 
@@ -1308,6 +1389,7 @@ window.toggleCamera = async () => {
     $("#btn-camera").setAttribute("aria-label", isCamOff ? "Enable camera" : "Disable camera");
     $("#icon-cam").style.display = isCamOff ? "none" : "block";
     $("#icon-cam-off").style.display = isCamOff ? "block" : "none";
+    updateLocalMediaIndicators();
   } catch (e) { showToast(e.message || "Camera unavailable"); }
 };
 
@@ -1367,6 +1449,7 @@ window.endCall = () => {
   $("#icon-screen").style.display = "block"; $("#icon-screen-off").style.display = "none";
   $("#btn-screen").classList.remove("active");
   $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
+  updateLocalMediaIndicators();
   $("#host-offer").style.display = "none"; $("#host-offer").value = "";
   $("#host-actions").style.display = "none"; $("#btn-start-host").style.display = "inline-flex";
   $("#join-offer").style.display = "none"; $("#join-answer").style.display = "none";
@@ -1436,6 +1519,7 @@ window.enterInviteAnswer = () => {
 
 /* Init */
 route();
+updateLocalMediaIndicators();
 if (location.hash === "#main" && !mesh) { location.hash = ""; }
 </script>
 </body>
