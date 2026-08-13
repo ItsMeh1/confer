@@ -229,7 +229,7 @@
             </button>
             <button id="btn-camera" class="ctrl ctrl-cam" aria-label="Enable camera" onclick="toggleCamera()">
               <svg id="icon-cam" style="display:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-              <svg id="icon-cam-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y1="23"/><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              <svg id="icon-cam-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
             </button>
             <button id="btn-switch" class="ctrl ctrl-switch" aria-label="Switch camera" onclick="switchCamera()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
@@ -309,7 +309,7 @@
 </div>
 
 <script type="module">
-/* ===================== LanChat Module (verbatim from upload) ===================== */
+/* ===================== LanChat Module ===================== */
 class LanChat {
   constructor(options = {}) {
     this.options = {
@@ -324,11 +324,13 @@ class LanChat {
     this.localStream = options.localStream || new MediaStream();
     this.ownsLocalStream = !options.localStream;
     this.remoteStream = new MediaStream();
+    this.remoteScreenStream = new MediaStream();
     this.screenStream = null;
     this.localVideoElement = null;
     this.remoteVideoElement = null;
     this._mediaSenders = new Map();
     this._screenSenders = new Map();
+    this._screenTransceiver = null;
     this.lastOfferText = "";
     this.lastAnswerText = "";
     this.lastRemoteText = "";
@@ -378,7 +380,7 @@ class LanChat {
     const fn = this[name];
     if (typeof fn === "function") fn(value);
   }
-  _makeRoomCode(length = 6) {
+  _makeRoomCode(length = 8) {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     const bytes = new Uint8Array(length);
     crypto.getRandomValues(bytes);
@@ -394,13 +396,27 @@ class LanChat {
     pc.onsignalingstatechange = () => this._emit("onstatechange", this.state);
     pc.oniceconnectionstatechange = () => this._emit("onstatechange", this.state);
     pc.ontrack = (event) => {
-      if (event.track && !this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
-        this.remoteStream.addTrack(event.track);
+      const isScreen = this._screenTransceiver && event.transceiver === this._screenTransceiver;
+      const targetStream = isScreen ? this.remoteScreenStream : this.remoteStream;
+      if (event.track && !targetStream.getTracks().some((t) => t.id === event.track.id)) {
+        targetStream.addTrack(event.track);
       }
-      if (this.remoteVideoElement) {
+      if (!isScreen && this.remoteVideoElement) {
         this.remoteVideoElement.srcObject = this.remoteStream;
       }
-      this._emit("onremotestream", this.remoteStream);
+      if (isScreen) {
+        this._emit("onscreenstream", this.remoteScreenStream);
+      } else {
+        this._emit("onremotestream", this.remoteStream);
+      }
+      event.track.onended = () => {
+        try { targetStream.removeTrack(event.track); } catch {}
+        if (isScreen && this.remoteScreenStream.getTracks().length === 0) {
+          this._emit("onscreenstream", null);
+        } else if (!isScreen) {
+          this._emit("onremotestream", this.remoteStream);
+        }
+      };
       this._emit("ontrack", {
         track: event.track,
         streams: event.streams,
@@ -418,11 +434,11 @@ class LanChat {
   }
   _prepareMediaSlots() {
     if (!this.pc || this.pc.getTransceivers().length) return;
-    // Negotiate empty slots up front.  Tracks can then be enabled later with
-    // replaceTrack(), without asking the other person to exchange new codes.
     this.pc.addTransceiver("audio", { direction: "sendrecv" });
-    this.pc.addTransceiver("video", { direction: "sendrecv" }); // camera
-    this.pc.addTransceiver("video", { direction: "sendrecv" }); // screen
+    this.pc.addTransceiver("video", { direction: "sendrecv" });
+    this.pc.addTransceiver("video", { direction: "sendrecv" });
+    const videos = this.pc.getTransceivers().filter((t) => t.receiver?.track?.kind === "video");
+    this._screenTransceiver = videos[1] || null;
   }
   _senderFor(slot) {
     if (!this.pc) return null;
@@ -440,6 +456,7 @@ class LanChat {
   }
   _attachChannel(channel) {
     this.channel = channel;
+    try { channel.binaryType = "arraybuffer"; } catch {}
     channel.onopen = () => {
       this._emit("onopen", this.state);
       this._emit("onstatechange", this.state);
@@ -535,6 +552,9 @@ class LanChat {
     this.localStream = stream || new MediaStream();
     this.ownsLocalStream = false;
     if (this.localVideoElement) this.localVideoElement.srcObject = this.localStream;
+    this._syncLocalTracksToPeer().catch(() => {});
+    this._emit("onlocalstream", this.localStream);
+    this._emit("onstatechange", this.state);
   }
   exportState() {
     return JSON.stringify(this.state, null, 2);
@@ -643,11 +663,14 @@ class LanChat {
     this.pc = this._makePeer();
     const offer = this._parseJSON(offerText);
     await this.pc.setRemoteDescription(offer);
-    // Empty offer slots arrive as recvonly on the joining side.  Make them
-    // sendrecv now so either participant can enable media after connecting.
     for (const transceiver of this.pc.getTransceivers()) {
-      if (transceiver.direction === "recvonly") transceiver.direction = "sendrecv";
+      transceiver.direction = "sendrecv";
     }
+    // The remote description creates the negotiated media transceivers on the
+    // answering side. Mark the second video slot as the screen-share slot too,
+    // otherwise a remote screen track is mistaken for the camera track.
+    const videoTransceivers = this.pc.getTransceivers().filter((t) => t.receiver?.track?.kind === "video");
+    this._screenTransceiver = videoTransceivers[1] || null;
     await this._syncLocalTracksToPeer();
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
@@ -714,6 +737,15 @@ class LanChat {
     this.role = "idle";
     this._mediaSenders.clear();
     this._screenSenders.clear();
+    this._screenTransceiver = null;
+    for (const track of this.remoteStream.getTracks().slice()) {
+      try { this.remoteStream.removeTrack(track); } catch {}
+    }
+    for (const track of this.remoteScreenStream.getTracks().slice()) {
+      try { this.remoteScreenStream.removeTrack(track); } catch {}
+    }
+    this._emit("onremotestream", null);
+    this._emit("onscreenstream", null);
     if (!keepMedia) {
       for (const track of this.localStream.getTracks().slice()) {
         try { track.stop(); } catch {}
@@ -762,6 +794,7 @@ const CRYPTO = {
 };
 
 async function buildPayload(headerObj, plaintext) {
+  if (!cryptoKey) throw new Error("Encryption is not ready.");
   const header = new TextEncoder().encode(JSON.stringify(headerObj));
   const headerLen = new Uint8Array(4);
   new DataView(headerLen.buffer).setUint32(0, header.length, false);
@@ -773,11 +806,16 @@ async function buildPayload(headerObj, plaintext) {
 }
 
 async function parsePayload(buffer) {
+  if (!cryptoKey) throw new Error("Encryption is not ready.");
+  if (!buffer || buffer.byteLength < 17) throw new Error("Invalid message payload.");
   const view = new DataView(buffer);
   const headerLen = view.getUint32(0, false);
+  if (headerLen <= 0 || headerLen > 16384 || headerLen > buffer.byteLength - 16) throw new Error("Invalid message header.");
+  const headerEnd = 4 + headerLen;
   const headerBytes = new Uint8Array(buffer, 4, headerLen);
   const header = JSON.parse(new TextDecoder().decode(headerBytes));
-  const encrypted = new Uint8Array(buffer, 4 + headerLen);
+  const encrypted = new Uint8Array(buffer, headerEnd);
+  if (encrypted.byteLength < 13) throw new Error("Invalid encrypted payload.");
   const decrypted = await CRYPTO.decrypt(cryptoKey, encrypted);
   return { header, data: decrypted };
 }
@@ -818,8 +856,6 @@ function decodeSignalText(text) {
     .replace(/^\uFEFF/, "").replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'").trim();
   if (!raw) throw new Error("Paste box is empty.");
-  // Accept raw SDP JSON too, which makes recovery easier if a clipboard or
-  // messaging app mangles a Base64 value.
   if (raw.startsWith("{")) {
     JSON.parse(raw);
     return raw;
@@ -841,7 +877,9 @@ class ConferMesh {
     this.screenStream = null;
     this.roomCode = "";
     this.isHost = false;
-    this.pendingAnswers = new Map();
+    this.myId = "u_" + Math.random().toString(36).slice(2, 9);
+    this.meshOffers = new Map();
+    this.hostPeerId = null;
     this.onPeerMessage = null;
     this.onPeerConnect = null;
     this.onPeerDisconnect = null;
@@ -851,8 +889,6 @@ class ConferMesh {
   createPeer(peerId, isHostSide) {
     const lc = new LanChat({
       channelName: "confer",
-      // Host candidates make this work directly on a normal LAN. STUN also
-      // helps when the two devices are not on the same network.
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       localStream: this.localStream
     });
@@ -863,41 +899,91 @@ class ConferMesh {
     const remoteVideo = document.createElement("video");
     remoteVideo.autoplay = true; remoteVideo.playsInline = true;
     remoteVideo.id = "remote-" + peerId;
-    remoteVideo.style.width = "100%"; remoteVideo.style.height = "100%";
-    remoteVideo.style.objectFit = "cover"; remoteVideo.style.borderRadius = "8px";
+    remoteVideo.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px;";
+
+    const remoteScreenVideo = document.createElement("video");
+    remoteScreenVideo.autoplay = true; remoteScreenVideo.playsInline = true;
+    remoteScreenVideo.id = "remote-screen-" + peerId;
+    remoteScreenVideo.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px;display:none;z-index:2;";
+
     const remoteStatus = document.createElement("div");
     remoteStatus.className = "remote-media-off";
     remoteStatus.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span>Camera off</span>';
+
     const remoteAudioStatus = document.createElement("div");
     remoteAudioStatus.className = "remote-audio-badge";
     remoteAudioStatus.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v6a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/></svg><span>Mic off</span>';
+
     remoteTile.appendChild(remoteVideo);
+    remoteTile.appendChild(remoteScreenVideo);
     remoteTile.appendChild(remoteStatus);
     remoteTile.appendChild(remoteAudioStatus);
     document.getElementById("video-grid").appendChild(remoteTile);
     lc.attachRemoteVideo(remoteVideo);
 
+    const p = {
+      lc,
+      remoteVideo,
+      remoteScreenVideo,
+      remoteTile,
+      remoteStatus,
+      remoteAudioStatus,
+      isHostSide,
+      remoteId: null,
+      remoteCameraOn: false,
+      remoteMicrophoneOn: false,
+      remoteScreenOn: false
+    };
+
     lc.onopen = () => {
+      try { lc.sendJSON({ type: "hello", id: this.myId }); } catch (e) {}
       this.updatePeerCount();
       this.broadcastMediaStatus();
       if (this.onPeerConnect) this.onPeerConnect(peerId);
-      this.broadcastPeerList();
+      if (this.isHost) this.broadcastPeerList();
     };
     lc.onclose = () => {
-      this.removePeer(peerId);
-      if (this.onPeerDisconnect) this.onPeerDisconnect(peerId);
+      if (this.removePeer(peerId) && this.onPeerDisconnect) this.onPeerDisconnect(peerId);
     };
     lc.onerror = (e) => { console.error("Peer " + peerId + " error:", e); };
+    lc.onstatechange = (state) => {
+      if (state.connectionState === "failed" || state.connectionState === "closed") {
+        if (this.peers.has(peerId)) {
+          if (this.removePeer(peerId) && this.onPeerDisconnect) this.onPeerDisconnect(peerId);
+        }
+      }
+    };
+    lc.onscreenstream = (stream) => {
+      const active = !!stream && stream.getTracks().length > 0;
+      remoteScreenVideo.srcObject = active ? stream : null;
+      remoteScreenVideo.style.display = active ? "block" : "none";
+      remoteVideo.style.display = active ? "none" : (p.remoteCameraOn ? "block" : "none");
+      remoteStatus.classList.toggle("hidden", active || p.remoteCameraOn);
+      p.remoteScreenOn = active;
+    };
     lc.onmessage = async (data) => {
       if (typeof data === "string") {
         try {
           const cmd = JSON.parse(data);
-          if (cmd.type === "signal" && this.isHost) {
-            this.relaySignal(cmd.from, cmd.to, cmd.payload);
+          if (cmd.type === "hello") {
+            p.remoteId = cmd.id;
+            if (this.isHost) this.broadcastPeerList();
           } else if (cmd.type === "peer-list") {
             this.connectToPeers(cmd.peers);
           } else if (cmd.type === "media-status") {
             this.updateRemoteMediaStatus(peerId, cmd);
+          } else if (cmd.type === "signal-offer") {
+            if (this.isHost) {
+              this.forwardSignalByRemoteId(cmd.to, cmd);
+            } else if (cmd.to === this.myId) {
+              await this.handleMeshOffer(cmd.from, cmd.offer);
+            }
+          } else if (cmd.type === "signal-answer") {
+            if (this.isHost) {
+              this.forwardSignalByRemoteId(cmd.to, cmd);
+            } else if (cmd.to === this.myId) {
+              await this.handleMeshAnswer(cmd.from, cmd.answer);
+            }
           }
         } catch (e) {}
         return;
@@ -908,19 +994,24 @@ class ConferMesh {
       }
     };
 
-    this.peers.set(peerId, { lc, remoteVideo, remoteTile, remoteStatus, remoteAudioStatus, isHostSide });
+    this.peers.set(peerId, p);
     lc._syncLocalTracksToPeer().catch(() => {});
     return lc;
   }
 
   removePeer(peerId) {
     const p = this.peers.get(peerId);
-    if (p) {
+    if (!p) return false;
+    {
+      for (const [remoteId, pid] of this.meshOffers) {
+        if (pid === peerId) this.meshOffers.delete(remoteId);
+      }
       p.lc.close({ keepMedia: true });
       if (p.remoteTile && p.remoteTile.parentNode) p.remoteTile.parentNode.removeChild(p.remoteTile);
       this.peers.delete(peerId);
     }
     this.updatePeerCount();
+    return true;
   }
 
   updatePeerCount() {
@@ -931,9 +1022,10 @@ class ConferMesh {
   broadcastMediaStatus() {
     const cameraOn = !!this.localStream.getVideoTracks()[0];
     const microphoneOn = !!this.localStream.getAudioTracks()[0];
+    const screenOn = !!(this.screenStream && this.screenStream.getVideoTracks().length > 0);
     for (const { lc } of this.peers.values()) {
       if (lc.connected) {
-        try { lc.sendJSON({ type: "media-status", cameraOn, microphoneOn }); } catch (e) {}
+        try { lc.sendJSON({ type: "media-status", cameraOn, microphoneOn, screenOn }); } catch (e) {}
       }
     }
   }
@@ -941,54 +1033,144 @@ class ConferMesh {
   updateRemoteMediaStatus(peerId, status) {
     const peer = this.peers.get(peerId);
     if (!peer?.remoteStatus) return;
-    peer.remoteStatus.classList.toggle("hidden", !!status.cameraOn);
-    peer.remoteAudioStatus?.classList.toggle("hidden", !!status.microphoneOn);
+    peer.remoteCameraOn = !!status.cameraOn;
+    peer.remoteMicrophoneOn = !!status.microphoneOn;
+    peer.remoteScreenOn = !!status.screenOn;
+    const cameraVisible = peer.remoteCameraOn || peer.remoteScreenOn;
+    peer.remoteStatus.classList.toggle("hidden", cameraVisible);
+    peer.remoteAudioStatus?.classList.toggle("hidden", peer.remoteMicrophoneOn);
+    if (peer.remoteScreenVideo) {
+      if (peer.remoteScreenOn) {
+        peer.remoteScreenVideo.style.display = "block";
+        peer.remoteVideo.style.display = "none";
+      } else {
+        peer.remoteScreenVideo.srcObject = null;
+        peer.remoteScreenVideo.style.display = "none";
+        peer.remoteVideo.style.display = peer.remoteCameraOn ? "block" : "none";
+      }
+    }
   }
 
   async hostPeer() {
     this.isHost = true;
-    const peerId = "peer-" + Date.now();
+    const peerId = "peer-" + crypto.randomUUID();
     const lc = this.createPeer(peerId, true);
     const offer = await lc.host();
-    return { peerId, offer: toBase64(offer) };
+    const signal = JSON.parse(offer);
+    signal.conferRoomCode = this.roomCode;
+    return { peerId, offer: toBase64(JSON.stringify(signal)) };
   }
 
   async joinPeer(encodedOffer, roomCode) {
-    this.roomCode = roomCode;
-    const peerId = "host-" + Date.now();
+    this.roomCode = String(roomCode || "").trim().toUpperCase();
+    if (!this.roomCode) throw new Error("Room code is required.");
+    const peerId = "host-" + crypto.randomUUID();
+    this.hostPeerId = peerId;
     const lc = this.createPeer(peerId, false);
-    const offerText = decodeSignalText(encodedOffer);
-    const answer = await lc.join(offerText);
-    return { peerId, answer: toBase64(answer) };
+    const signal = JSON.parse(decodeSignalText(encodedOffer));
+    if (signal.conferRoomCode !== this.roomCode) {
+      this.removePeer(peerId);
+      throw new Error("Room code does not match this invitation.");
+    }
+    delete signal.conferRoomCode;
+    const answer = await lc.join(JSON.stringify(signal));
+    const answerSignal = JSON.parse(answer);
+    answerSignal.conferRoomCode = this.roomCode;
+    return { peerId, answer: toBase64(JSON.stringify(answerSignal)) };
   }
 
   async acceptAnswer(peerId, encodedAnswer) {
     const p = this.peers.get(peerId);
     if (!p) throw new Error("Peer not found");
-    const answerText = decodeSignalText(encodedAnswer);
-    await p.lc.accept(answerText);
+    const answerSignal = JSON.parse(decodeSignalText(encodedAnswer));
+    if (answerSignal.conferRoomCode !== this.roomCode) {
+      throw new Error("Answer is for a different room.");
+    }
+    delete answerSignal.conferRoomCode;
+    await p.lc.accept(JSON.stringify(answerSignal));
   }
 
-  relaySignal(fromPeer, toPeer, payload) {
-    for (const [id, p] of this.peers) {
-      if (id !== fromPeer && p.lc.connected) {
-        p.lc.sendJSON({ type: "signal", from: fromPeer, to: toPeer, payload });
+  forwardSignalByRemoteId(remoteId, message) {
+    for (const [, p] of this.peers) {
+      if (p.remoteId === remoteId && p.lc.connected) {
+        p.lc.sendJSON(message);
+        return true;
       }
     }
+    return false;
   }
 
   broadcastPeerList() {
     if (!this.isHost) return;
-    const peerIds = Array.from(this.peers.keys());
-    for (const [id, p] of this.peers) {
+    const peers = Array.from(this.peers.values())
+      .filter(p => p.remoteId && p.lc.connected)
+      .map(p => p.remoteId);
+    for (const [, p] of this.peers) {
       if (p.lc.connected) {
-        p.lc.sendJSON({ type: "peer-list", peers: peerIds.filter((x) => x !== id) });
+        p.lc.sendJSON({ type: "peer-list", peers });
       }
     }
   }
 
-  connectToPeers(peerIds) {
-    // Guests auto-connect to other peers via host relay
+  connectToPeers(peers) {
+    for (const remoteId of peers) {
+      if (remoteId === this.myId) continue;
+      const already = Array.from(this.peers.values()).some(p => p.remoteId === remoteId) || this.meshOffers.has(remoteId);
+      if (already) continue;
+      if (this.myId < remoteId) {
+        this.initiateMeshOffer(remoteId);
+      }
+    }
+  }
+
+  async initiateMeshOffer(remoteId) {
+    const peerId = "mesh-" + crypto.randomUUID();
+    const lc = this.createPeer(peerId, true);
+    this.meshOffers.set(remoteId, peerId);
+    try {
+      const offer = await lc.host();
+      const offerB64 = toBase64(offer);
+      for (const [, p] of this.peers) {
+        if (p.lc.connected) {
+          p.lc.sendJSON({ type: "signal-offer", from: this.myId, to: remoteId, offer: offerB64 });
+        }
+      }
+    } catch (e) {
+      console.error("Mesh offer failed", e);
+      this.removePeer(peerId);
+    }
+  }
+
+  async handleMeshOffer(fromRemoteId, encodedOffer) {
+    const peerId = "mesh-ans-" + crypto.randomUUID();
+    const lc = this.createPeer(peerId, false);
+    this.meshOffers.set(fromRemoteId, peerId);
+    try {
+      const offerText = decodeSignalText(encodedOffer);
+      const answer = await lc.join(offerText);
+      const answerB64 = toBase64(answer);
+      for (const [, p] of this.peers) {
+        if (p.lc.connected) {
+          p.lc.sendJSON({ type: "signal-answer", from: this.myId, to: fromRemoteId, answer: answerB64 });
+        }
+      }
+    } catch (e) {
+      console.error("Mesh answer failed", e);
+      this.removePeer(peerId);
+    }
+  }
+
+  async handleMeshAnswer(fromRemoteId, encodedAnswer) {
+    const peerId = this.meshOffers.get(fromRemoteId);
+    if (!peerId) return;
+    const p = this.peers.get(peerId);
+    if (!p) return;
+    try {
+      const answerText = decodeSignalText(encodedAnswer);
+      await p.lc.accept(answerText);
+    } catch (e) {
+      console.error("Mesh accept failed", e);
+    }
   }
 
   broadcast(data) {
@@ -1028,6 +1210,7 @@ class ConferMesh {
 
   async enableMicrophone() {
     if (this.localStream.getAudioTracks()[0]) return;
+    ensureMediaDevices();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const track = stream.getAudioTracks()[0];
     if (track) this.localStream.addTrack(track);
@@ -1046,6 +1229,7 @@ class ConferMesh {
 
   async enableCamera(constraints = true) {
     if (this.localStream.getVideoTracks()[0]) return;
+    ensureMediaDevices();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: constraints });
     const track = stream.getVideoTracks()[0];
     if (track) this.localStream.addTrack(track);
@@ -1065,6 +1249,7 @@ class ConferMesh {
   }
 
   async switchCamera(deviceId) {
+    ensureMediaDevices();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { deviceId: { exact: deviceId } } });
     const newTrack = stream.getVideoTracks()[0];
     if (!newTrack) throw new Error("Selected camera did not provide video.");
@@ -1083,20 +1268,32 @@ class ConferMesh {
       lc.screenStream = stream;
       if (lc.pc && lc.pc.connectionState !== "closed") await lc._syncLocalTracksToPeer();
     }));
+    this.broadcastMediaStatus();
   }
 
   stopScreenAll() {
     const stream = this.screenStream;
+    for (const track of stream?.getTracks?.() || []) track.stop();
     this.screenStream = null;
     for (const { lc } of this.peers.values()) {
       lc.screenStream = null;
       lc._replaceSlot("screen", null).catch(() => {});
     }
-    for (const track of stream?.getTracks?.() || []) track.stop();
+    this.broadcastMediaStatus();
   }
 
-  replaceCameraTrack(newTrack) {
-    return this.switchCamera(newTrack?.getSettings?.().deviceId);
+  async replaceCameraTrack(newTrack) {
+    if (!(newTrack instanceof MediaStreamTrack) || newTrack.kind !== "video") {
+      throw new Error("replaceCameraTrack requires a video MediaStreamTrack.");
+    }
+    for (const track of this.localStream.getVideoTracks().slice()) {
+      this.localStream.removeTrack(track);
+      try { track.stop(); } catch {}
+    }
+    this.localStream.addTrack(newTrack);
+    this._refreshLocalPreview();
+    await this.syncMedia();
+    this.broadcastMediaStatus();
   }
 
   muteAllAudio(muted) {
@@ -1114,9 +1311,17 @@ class ConferMesh {
   closeAll() {
     for (const [, p] of this.peers) p.lc.close({ keepMedia: true });
     this.peers.clear();
+    this.meshOffers.clear();
     this.stopScreenAll();
-    for (const track of this.localStream.getTracks()) track.stop();
+    for (const track of this.localStream.getTracks().slice()) {
+      try { track.stop(); } catch {}
+      try { this.localStream.removeTrack(track); } catch {}
+    }
     this.localStream = new MediaStream();
+    this.hostPeerId = null;
+    this.isHost = false;
+    const myVideo = document.getElementById("myVideo");
+    if (myVideo) myVideo.srcObject = this.localStream;
     document.getElementById("video-grid").innerHTML = "";
     this.updatePeerCount();
   }
@@ -1132,7 +1337,11 @@ let isCamOff = true;
 let isScreenOn = false;
 let cameraDevices = [];
 let cameraIndex = 0;
-let currentHostPeerId = null;
+const pendingInvites = new Map();
+const incomingFiles = new Map();
+const fileObjectUrls = new Set();
+const FILE_CHUNK_SIZE = 12 * 1024;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -1204,6 +1413,85 @@ function addFileMessage(name, url, mime, isOut) {
   div.appendChild(bubble); list.appendChild(div); list.scrollTop = list.scrollHeight;
 }
 
+async function sendPayloadToMesh(payload) {
+  if (!mesh) throw new Error("Not connected.");
+  const connected = Array.from(mesh.peers.values()).some((p) => p.lc.connected);
+  if (!connected) throw new Error("Not connected yet");
+  if (mesh.isHost) {
+    mesh.broadcast(payload);
+    return;
+  }
+  const hostPeer = mesh.peers.get(mesh.hostPeerId);
+  if (!hostPeer || !hostPeer.lc.connected) throw new Error("Host not connected");
+  hostPeer.lc.sendBinary(payload);
+}
+
+function rememberObjectUrl(url) {
+  if (url) fileObjectUrls.add(url);
+  return url;
+}
+
+function clearFileTransfers() {
+  for (const transfer of incomingFiles.values()) {
+    if (transfer.timer) clearTimeout(transfer.timer);
+  }
+  incomingFiles.clear();
+  for (const url of fileObjectUrls) {
+    try { URL.revokeObjectURL(url); } catch {}
+  }
+  fileObjectUrls.clear();
+}
+
+function handleIncomingFileChunk(peerId, header, decrypted) {
+  const total = Number(header.total);
+  const index = Number(header.index);
+  if (!Number.isSafeInteger(total) || !Number.isSafeInteger(index) || total < 1 || index < 0 || index >= total) {
+    throw new Error("Invalid file chunk metadata.");
+  }
+  if (total > Math.ceil(MAX_FILE_SIZE / FILE_CHUNK_SIZE)) throw new Error("File is too large.");
+  const fileId = String(header.id || "");
+  if (!fileId) throw new Error("Missing file ID.");
+  const key = peerId + ":" + fileId;
+  let transfer = incomingFiles.get(key);
+  if (!transfer) {
+    transfer = {
+      name: String(header.name || "file"),
+      mime: String(header.mime || "application/octet-stream"),
+      total,
+      chunks: new Map(),
+      bytes: 0,
+      timer: null
+    };
+    incomingFiles.set(key, transfer);
+  }
+  if (transfer.total !== total) throw new Error("Inconsistent file chunk count.");
+  if (!transfer.chunks.has(index)) {
+    const chunk = new Uint8Array(decrypted);
+    transfer.bytes += chunk.byteLength;
+    if (transfer.bytes > MAX_FILE_SIZE) {
+      incomingFiles.delete(key);
+      throw new Error("File is too large.");
+    }
+    transfer.chunks.set(index, chunk);
+  }
+  if (transfer.timer) clearTimeout(transfer.timer);
+  transfer.timer = setTimeout(() => { incomingFiles.delete(key); }, 120000);
+  if (transfer.chunks.size !== transfer.total) return false;
+
+  const parts = [];
+  for (let i = 0; i < transfer.total; i++) {
+    const chunk = transfer.chunks.get(i);
+    if (!chunk) return false;
+    parts.push(chunk);
+  }
+  const blob = new Blob(parts, { type: transfer.mime });
+  const url = rememberObjectUrl(URL.createObjectURL(blob));
+  addFileMessage(transfer.name, url, transfer.mime, false);
+  if (transfer.timer) clearTimeout(transfer.timer);
+  incomingFiles.delete(key);
+  return true;
+}
+
 function initMesh() {
   if (mesh) mesh.closeAll();
   mesh = new ConferMesh();
@@ -1217,20 +1505,26 @@ function initMesh() {
   mesh.onPeerMessage = async (peerId, data) => {
     try {
       const { header, data: decrypted } = await parsePayload(data);
-      if (header.t === "msg") { addMessage(new TextDecoder().decode(decrypted), false); }
-      else if (header.t === "file") {
-        const blob = new Blob([decrypted], { type: header.mime || "application/octet-stream" });
-        addFileMessage(header.name, URL.createObjectURL(blob), header.mime, false);
+      if (header.t === "msg") {
+        addMessage(new TextDecoder().decode(decrypted), false);
+      } else if (header.t === "file") {
+        handleIncomingFileChunk(peerId, header, decrypted);
       }
-      // Invited peers are directly connected to the host. Forward encrypted
-      // chat/file payloads once so everyone in that room receives them.
       if (mesh?.isHost) mesh.broadcastExcept(peerId, data);
     } catch (e) { console.error("Decrypt failed", e); }
   };
 }
 
 async function setupCrypto(password) {
-  try { cryptoKey = await CRYPTO.deriveKey(password); } catch (e) { console.error(e); showToast("Crypto init failed"); }
+  try {
+    cryptoKey = await CRYPTO.deriveKey(password);
+    return cryptoKey;
+  } catch (e) {
+    cryptoKey = null;
+    console.error(e);
+    showToast("Crypto init failed");
+    throw e;
+  }
 }
 
 /* Routing */
@@ -1257,8 +1551,9 @@ function route() {
       $("#host-ui").style.display = "flex";
       $("#join-ui").style.display = "none";
       if (!mesh) initMesh();
-      $("#room-code-display").textContent = mesh.roomCode || (mesh.roomCode = new LanChat().roomCode);
-      setupCrypto(mesh.roomCode);
+      if (!mesh.roomCode) mesh.roomCode = new LanChat().roomCode;
+      $("#room-code-display").textContent = mesh.roomCode;
+      setupCrypto(mesh.roomCode).catch(() => {});
     } else if (mode === "join") {
       $("#auth-title").textContent = "Join room";
       $("#host-ui").style.display = "none";
@@ -1287,7 +1582,7 @@ $("#btn-start-host").addEventListener("click", async () => {
   try {
     await setupCrypto(mesh.roomCode);
     const { peerId, offer } = await mesh.hostPeer();
-    currentHostPeerId = peerId;
+    pendingInvites.set(peerId, Date.now());
     $("#host-offer").style.display = "block";
     $("#host-offer").value = offer;
     $("#btn-start-host").style.display = "none";
@@ -1355,7 +1650,16 @@ window.acceptAnswer = async () => {
   const answer = $("#host-answer-input").value.trim();
   if (!answer) { showToast("Paste the answer first"); return; }
   try {
-    await mesh.acceptAnswer(currentHostPeerId, answer);
+    let accepted = false;
+    for (const [peerId] of pendingInvites) {
+      try {
+        await mesh.acceptAnswer(peerId, answer);
+        pendingInvites.delete(peerId);
+        accepted = true;
+        break;
+      } catch (e) { /* try next pending invite */ }
+    }
+    if (!accepted) throw new Error("Answer did not match any pending invitation.");
     $("#host-answer-overlay").classList.remove("active");
     $("#invite-overlay").classList.remove("active");
     $("#host-answer-input").value = "";
@@ -1363,12 +1667,23 @@ window.acceptAnswer = async () => {
   } catch (e) { showToast("Error: " + (e.message || "Invalid answer").substring(0, 60)); }
 };
 
+function ensureMediaDevices() {
+  if (!navigator.mediaDevices) {
+    throw new Error("Camera and microphone require a secure browser context (HTTPS or localhost).");
+  }
+}
+
 /* Main controls */
 window.toggleMute = async () => {
   if (!mesh) return;
   try {
-    if (isMuted) await mesh.enableMicrophone(); else await mesh.disableMicrophone();
-    isMuted = !isMuted;
+    if (isMuted) {
+      await mesh.enableMicrophone();
+      isMuted = false;
+    } else {
+      await mesh.disableMicrophone();
+      isMuted = true;
+    }
     $("#btn-mute").setAttribute("aria-label", isMuted ? "Enable microphone" : "Disable microphone");
     $("#icon-mic").style.display = isMuted ? "none" : "block";
     $("#icon-mic-off").style.display = isMuted ? "block" : "none";
@@ -1382,10 +1697,11 @@ window.toggleCamera = async () => {
     if (isCamOff) {
       await mesh.enableCamera();
       await enumerateCameras();
+      isCamOff = false;
     } else {
       await mesh.disableCamera();
+      isCamOff = true;
     }
-    isCamOff = !isCamOff;
     $("#btn-camera").setAttribute("aria-label", isCamOff ? "Enable camera" : "Disable camera");
     $("#icon-cam").style.display = isCamOff ? "none" : "block";
     $("#icon-cam-off").style.display = isCamOff ? "block" : "none";
@@ -1394,10 +1710,13 @@ window.toggleCamera = async () => {
 };
 
 async function enumerateCameras() {
+  if (!navigator.mediaDevices?.enumerateDevices) { cameraDevices = []; return; }
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     cameraDevices = devices.filter((d) => d.kind === "videoinput");
-    cameraIndex = 0;
+    const currentId = mesh?.localStream?.getVideoTracks?.()[0]?.getSettings?.().deviceId;
+    const currentIndex = currentId ? cameraDevices.findIndex((d) => d.deviceId === currentId) : -1;
+    cameraIndex = currentIndex >= 0 ? currentIndex : 0;
   } catch (e) { cameraDevices = []; }
 }
 
@@ -1413,8 +1732,13 @@ window.switchCamera = async () => {
 
 window.toggleScreen = async () => {
   if (!mesh) return;
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    showToast("Screen sharing is not supported in this browser.");
+    return;
+  }
   if (isScreenOn) {
     mesh.stopScreenAll();
+    $("#screenPreview").srcObject = null;
     $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
     isScreenOn = false;
   } else {
@@ -1426,11 +1750,21 @@ window.toggleScreen = async () => {
       isScreenOn = true;
       showToast("Screen sharing started");
       stream.getVideoTracks()[0]?.addEventListener("ended", () => {
-        mesh.stopScreenAll(); $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
+        mesh.stopScreenAll();
+        $("#screenPreview").srcObject = null;
+        $("#screenPreview").style.display = "none";
+        $("#screen-indicator").classList.remove("active");
         isScreenOn = false; $("#btn-screen").classList.remove("active");
         $("#icon-screen").style.display = "block"; $("#icon-screen-off").style.display = "none";
       });
-    } catch (e) { showToast(e.message || "Screen share failed"); }
+    } catch (e) {
+      try { mesh.stopScreenAll(); } catch {}
+      $("#screenPreview").srcObject = null;
+      $("#screenPreview").style.display = "none";
+      $("#screen-indicator").classList.remove("active");
+      isScreenOn = false;
+      showToast(e.message || "Screen share failed");
+    }
   }
   $("#btn-screen").classList.toggle("active", isScreenOn);
   $("#icon-screen").style.display = isScreenOn ? "none" : "block";
@@ -1440,6 +1774,8 @@ window.toggleScreen = async () => {
 window.endCall = () => {
   stopTimer();
   if (mesh) { mesh.closeAll(); mesh = null; }
+  pendingInvites.clear();
+  clearFileTransfers();
   $("#msg-list").innerHTML = "";
   $("#host-answer-overlay").classList.remove("active");
   $("#invite-overlay").classList.remove("active");
@@ -1448,6 +1784,7 @@ window.endCall = () => {
   $("#icon-cam").style.display = "none"; $("#icon-cam-off").style.display = "block";
   $("#icon-screen").style.display = "block"; $("#icon-screen-off").style.display = "none";
   $("#btn-screen").classList.remove("active");
+  $("#screenPreview").srcObject = null;
   $("#screenPreview").style.display = "none"; $("#screen-indicator").classList.remove("active");
   updateLocalMediaIndicators();
   $("#host-offer").style.display = "none"; $("#host-offer").value = "";
@@ -1462,10 +1799,11 @@ window.sendMessage = async () => {
   const input = $("#input-message");
   const text = input.value.trim();
   if (!text) return;
-  if (!mesh || mesh.peers.size === 0) { showToast("Not connected yet"); return; }
+  const connected = mesh && Array.from(mesh.peers.values()).some(p => p.lc.connected);
+  if (!connected) { showToast("Not connected yet"); return; }
   try {
     const payload = await buildPayload({ t: "msg" }, text);
-    mesh.broadcast(payload);
+    await sendPayloadToMesh(payload);
     addMessage(text, true);
     input.value = "";
   } catch (e) { showToast("Send failed"); }
@@ -1474,14 +1812,38 @@ window.sendMessage = async () => {
 window.onFileSelected = async (input) => {
   const file = input.files[0];
   if (!file) return;
-  if (!mesh || mesh.peers.size === 0) { showToast("Not connected yet"); return; }
   try {
-    const buf = await file.arrayBuffer();
-    const payload = await buildPayload({ t: "file", name: file.name, mime: file.type }, buf);
-    mesh.broadcast(payload);
-    addMessage("Sent: " + file.name, true, true);
-  } catch (e) { showToast("File send failed"); }
-  input.value = "";
+    if (!mesh || !Array.from(mesh.peers.values()).some((p) => p.lc.connected)) {
+      showToast("Not connected yet");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error("Files are limited to 100 MB.");
+    }
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const total = Math.max(1, Math.ceil(buf.byteLength / FILE_CHUNK_SIZE));
+    const fileId = crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    for (let index = 0; index < total; index++) {
+      const start = index * FILE_CHUNK_SIZE;
+      const chunk = buf.slice(start, start + FILE_CHUNK_SIZE);
+      const payload = await buildPayload({
+        t: "file",
+        id: fileId,
+        index,
+        total,
+        name: file.name,
+        mime: file.type || "application/octet-stream"
+      }, chunk);
+      await sendPayloadToMesh(payload);
+    }
+    const blob = new Blob([buf], { type: file.type || "application/octet-stream" });
+    addFileMessage(file.name, rememberObjectUrl(URL.createObjectURL(blob)), file.type, true);
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || "File send failed");
+  } finally {
+    input.value = "";
+  }
 };
 
 /* Invite overlay */
@@ -1497,7 +1859,7 @@ window.showInvite = () => {
 window.createInvite = async () => {
   try {
     const { peerId, offer } = await mesh.hostPeer();
-    currentHostPeerId = peerId;
+    pendingInvites.set(peerId, Date.now());
     $("#invite-offer").style.display = "block";
     $("#invite-offer").value = offer;
     $("#btn-create-invite").style.display = "none";
