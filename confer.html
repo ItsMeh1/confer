@@ -465,7 +465,7 @@ class LanChat {
     pc.onsignalingstatechange = () => this._emit("onstatechange", this.state);
     pc.oniceconnectionstatechange = () => this._emit("onstatechange", this.state);
     pc.ontrack = (event) => {
-      const isScreen = this._screenTransceiver && event.transceiver === this._screenTransceiver;
+      const isScreen = event.transceiver?.__conferSlot === "screen" || (this._screenTransceiver && event.transceiver === this._screenTransceiver);
       const targetStream = isScreen ? this.remoteScreenStream : this.remoteStream;
       if (event.track && !targetStream.getTracks().some((t) => t.id === event.track.id)) {
         targetStream.addTrack(event.track);
@@ -500,6 +500,8 @@ class LanChat {
     this.pc.addTransceiver("video", { direction: "sendrecv" });
     const videos = this.pc.getTransceivers().filter((t) => t.receiver?.track?.kind === "video");
     this._screenTransceiver = videos[1] || null;
+    if (this._screenTransceiver) this._screenTransceiver.__conferSlot = "screen";
+    if (videos[0]) videos[0].__conferSlot = "camera";
   }
   _senderFor(slot) {
     if (!this.pc) return null;
@@ -508,7 +510,8 @@ class LanChat {
       return transceivers.find((t) => t.receiver?.track?.kind === "audio")?.sender || null;
     }
     const videos = transceivers.filter((t) => t.receiver?.track?.kind === "video");
-    return (slot === "screen" ? videos[1] : videos[0])?.sender || null;
+    const tagged = videos.find((t) => t.__conferSlot === slot);
+    return (tagged || (slot === "screen" ? videos[1] : videos[0]))?.sender || null;
   }
   async _replaceSlot(slot, track) {
     const sender = this._senderFor(slot);
@@ -672,6 +675,8 @@ class LanChat {
     // Identify screen transceiver on joiner side (second video transceiver)
     const videos = this.pc.getTransceivers().filter((t) => t.receiver?.track?.kind === "video");
     this._screenTransceiver = videos[1] || null;
+    if (videos[0]) videos[0].__conferSlot = "camera";
+    if (videos[1]) videos[1].__conferSlot = "screen";
     for (const transceiver of this.pc.getTransceivers()) transceiver.direction = "sendrecv";
     await this._syncLocalTracksToPeer();
     const answer = await this.pc.createAnswer();
@@ -1182,20 +1187,27 @@ class ConferMesh {
   }
   async addScreenToAll(stream) {
     this.screenStream = stream;
-    await Promise.all(Array.from(this.peers.values()).map(async ({ lc }) => {
+    const peers = Array.from(this.peers.values());
+    await Promise.all(peers.map(async ({ lc }) => {
+      if (!lc.pc || lc.pc.connectionState === "closed") return;
       lc.screenStream = stream;
-      if (lc.pc && lc.pc.connectionState !== "closed") await lc._syncLocalTracksToPeer();
+      try {
+        await lc._replaceSlot("screen", stream.getVideoTracks()[0] || null);
+        await lc._applyVideoQuality();
+      } catch (e) {
+        console.warn("Screen share sync failed for peer:", e);
+      }
     }));
     this.broadcastMediaStatus();
   }
   stopScreenAll() {
     const stream = this.screenStream;
-    for (const track of stream?.getTracks?.() || []) track.stop();
     this.screenStream = null;
     for (const { lc } of this.peers.values()) {
       lc.screenStream = null;
-      lc._replaceSlot("screen", null).catch(() => {});
+      lc._replaceSlot("screen", null).catch((e) => console.warn("Screen stop sync failed:", e));
     }
+    for (const track of stream?.getTracks?.() || []) { try { track.stop(); } catch {} }
     this.broadcastMediaStatus();
   }
   closeAll() {
