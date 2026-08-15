@@ -83,6 +83,12 @@
   .msg-out .bubble{background:var(--text);color:var(--bg);border-bottom-right-radius:4px}
   .msg-system{justify-content:center}
   .msg-system .bubble{background:transparent;color:var(--text-tertiary);font-size:12px;max-width:100%;padding:4px 8px}
+  .msg-content{display:flex;flex-direction:column;align-items:flex-start;max-width:78%;min-width:0}
+  .msg-out .msg-content{align-items:flex-end}
+  .msg-sender{font-size:11px;font-weight:600;color:var(--text-secondary);margin:0 8px 4px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .msg-in .msg-sender{color:var(--text-secondary)}
+  .msg-out .msg-sender{color:var(--text-secondary)}
+  .msg-content .bubble{max-width:100%}
   .system-notice{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface-raised);color:var(--text-secondary);font-size:12px}
   .system-notice svg{width:14px;height:14px;flex-shrink:0}
   .system-notice.join{border-color:rgba(52,199,89,.3);color:#8ee5a8}
@@ -410,6 +416,9 @@ class LanChat {
     this.localVideoElement = null;
     this.remoteVideoElement = null;
     this._screenTransceiver = null;
+    this._cameraTransceiver = null;
+    this._cameraMid = null;
+    this._screenMid = null;
     this.lastOfferText = "";
     this.lastAnswerText = "";
     this.lastRemoteText = "";
@@ -465,7 +474,10 @@ class LanChat {
     pc.onsignalingstatechange = () => this._emit("onstatechange", this.state);
     pc.oniceconnectionstatechange = () => this._emit("onstatechange", this.state);
     pc.ontrack = (event) => {
-      const isScreen = event.transceiver?.__conferSlot === "screen" || (this._screenTransceiver && event.transceiver === this._screenTransceiver);
+      const transceiver = event.transceiver || null;
+      const mid = transceiver?.mid ?? null;
+      const isScreen = (this._screenMid != null && mid != null && mid === this._screenMid) ||
+        transceiver?.__conferSlot === "screen" || (this._screenTransceiver && transceiver === this._screenTransceiver);
       const targetStream = isScreen ? this.remoteScreenStream : this.remoteStream;
       if (event.track && !targetStream.getTracks().some((t) => t.id === event.track.id)) {
         targetStream.addTrack(event.track);
@@ -499,9 +511,12 @@ class LanChat {
     this.pc.addTransceiver("video", { direction: "sendrecv" });
     this.pc.addTransceiver("video", { direction: "sendrecv" });
     const videos = this.pc.getTransceivers().filter((t) => t.receiver?.track?.kind === "video");
+    this._cameraTransceiver = videos[0] || null;
     this._screenTransceiver = videos[1] || null;
+    if (this._cameraTransceiver) this._cameraTransceiver.__conferSlot = "camera";
     if (this._screenTransceiver) this._screenTransceiver.__conferSlot = "screen";
-    if (videos[0]) videos[0].__conferSlot = "camera";
+    this._cameraMid = this._cameraTransceiver?.mid ?? null;
+    this._screenMid = this._screenTransceiver?.mid ?? null;
   }
   _senderFor(slot) {
     if (!this.pc) return null;
@@ -510,8 +525,10 @@ class LanChat {
       return transceivers.find((t) => t.receiver?.track?.kind === "audio")?.sender || null;
     }
     const videos = transceivers.filter((t) => t.receiver?.track?.kind === "video");
+    const mid = slot === "screen" ? this._screenMid : this._cameraMid;
+    const byMid = mid != null ? videos.find((t) => t.mid === mid) : null;
     const tagged = videos.find((t) => t.__conferSlot === slot);
-    return (tagged || (slot === "screen" ? videos[1] : videos[0]))?.sender || null;
+    return (byMid || tagged || (slot === "screen" ? videos[1] : videos[0]))?.sender || null;
   }
   async _replaceSlot(slot, track) {
     const sender = this._senderFor(slot);
@@ -636,6 +653,8 @@ class LanChat {
     this.stopScreenShare();
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
     this.screenStream = stream;
+    const screenTrack = stream.getVideoTracks()[0];
+    if (screenTrack) { try { screenTrack.contentHint = "detail"; } catch {} }
     this._emit("onscreenstream", this.screenStream);
     if (this.pc) {
       for (const track of stream.getTracks()) await this._replaceSlot("screen", track);
@@ -661,6 +680,8 @@ class LanChat {
     await this._syncLocalTracksToPeer();
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
+    this._cameraMid = this._cameraTransceiver?.mid ?? this.pc.getTransceivers().find(t => t.__conferSlot === "camera")?.mid ?? null;
+    this._screenMid = this._screenTransceiver?.mid ?? this.pc.getTransceivers().find(t => t.__conferSlot === "screen")?.mid ?? null;
     await this._waitForIceComplete();
     this.lastOfferText = JSON.stringify(this.pc.localDescription, null, 2);
     this._emit("onstatechange", this.state);
@@ -674,13 +695,18 @@ class LanChat {
     await this.pc.setRemoteDescription(offer);
     // Identify screen transceiver on joiner side (second video transceiver)
     const videos = this.pc.getTransceivers().filter((t) => t.receiver?.track?.kind === "video");
+    this._cameraTransceiver = videos[0] || null;
     this._screenTransceiver = videos[1] || null;
-    if (videos[0]) videos[0].__conferSlot = "camera";
-    if (videos[1]) videos[1].__conferSlot = "screen";
+    if (this._cameraTransceiver) this._cameraTransceiver.__conferSlot = "camera";
+    if (this._screenTransceiver) this._screenTransceiver.__conferSlot = "screen";
+    this._cameraMid = this._cameraTransceiver?.mid ?? null;
+    this._screenMid = this._screenTransceiver?.mid ?? null;
     for (const transceiver of this.pc.getTransceivers()) transceiver.direction = "sendrecv";
     await this._syncLocalTracksToPeer();
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
+    this._cameraMid = this._cameraTransceiver?.mid ?? this.pc.getTransceivers().find(t => t.__conferSlot === "camera")?.mid ?? this._cameraMid;
+    this._screenMid = this._screenTransceiver?.mid ?? this.pc.getTransceivers().find(t => t.__conferSlot === "screen")?.mid ?? this._screenMid;
     await this._waitForIceComplete();
     this.lastRemoteText = offerText;
     this.lastAnswerText = JSON.stringify(this.pc.localDescription, null, 2);
@@ -707,7 +733,7 @@ class LanChat {
   close({ keepMedia = true } = {}) {
     try { if (this.channel && this.channel.readyState !== "closed") this.channel.close(); } catch {}
     try { if (this.pc) this.pc.close(); } catch {}
-    this.channel = null; this.pc = null; this.role = "idle"; this._screenTransceiver = null;
+    this.channel = null; this.pc = null; this.role = "idle"; this._screenTransceiver = null; this._cameraTransceiver = null; this._cameraMid = null; this._screenMid = null;
     if (!keepMedia) {
       for (const track of this.localStream.getTracks().slice()) { try { track.stop(); } catch {} try { this.localStream.removeTrack(track); } catch {} }
       if (this.screenStream) { for (const track of this.screenStream.getTracks().slice()) { try { track.stop(); } catch {} try { this.screenStream.removeTrack(track); } catch {} } this.screenStream = null; }
@@ -886,7 +912,7 @@ class ConferMesh {
     remoteVideo.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:6px;";
 
     const remoteScreenVideo = document.createElement("video");
-    remoteScreenVideo.autoplay = true; remoteScreenVideo.playsInline = true;
+    remoteScreenVideo.autoplay = true; remoteScreenVideo.playsInline = true; remoteScreenVideo.muted = true; remoteScreenVideo.setAttribute("muted", "");
     remoteScreenVideo.className = "remote-screen-video";
     remoteScreenVideo.id = "remote-screen-" + peerId;
     remoteScreenVideo.onclick = () => { if (remoteScreenVideo.srcObject) openFullscreen(remoteScreenVideo); };
@@ -913,18 +939,27 @@ class ConferMesh {
 
     const p = { lc, remoteVideo, remoteScreenVideo, remoteTile, remoteStatus, remoteAudioStatus, remoteLabel, isHostSide, remoteId: null, remoteName: peerId.slice(0, 10) };
 
-    lc.onopen = () => {
+    lc.onopen = async () => {
       try { lc.sendJSON({ type: "hello", id: this.myId, name: this.displayName }); } catch (e) {}
+      // If a participant joins while screen sharing is already active, attach the
+      // existing screen track to this newly-created connection as well.
+      if (this.screenStream?.getVideoTracks?.()[0]) {
+        lc.screenStream = this.screenStream;
+        try { await lc._replaceSlot("screen", this.screenStream.getVideoTracks()[0]); } catch (e) { console.warn("Late screen-share sync failed:", e); }
+      }
       this.updatePeerCount();
-      this.broadcastMediaStatus();
       if (this.onPeerConnect) this.onPeerConnect(peerId);
       if (this.isHost) this.broadcastPeerList();
+      this.broadcastMediaStatus();
     };
     lc.onclose = () => {
       const removed = this.removePeer(peerId);
       if (removed && this.onPeerDisconnect) this.onPeerDisconnect(peerId);
     };
-    lc.onerror = (e) => { console.error("Peer " + peerId + " error:", e); };
+    lc.onerror = (e) => {
+      const state = lc.channel?.readyState;
+      if (state !== "closing" && state !== "closed") console.error("Peer " + peerId + " error:", e);
+    };
     lc.onstatechange = (state) => {
       if (state.connectionState === "failed" || state.connectionState === "closed") {
         if (this.peers.has(peerId)) {
@@ -937,6 +972,7 @@ class ConferMesh {
       if (stream && stream.getTracks().length > 0) {
         remoteScreenVideo.srcObject = stream;
         remoteScreenVideo.style.display = "block";
+        remoteScreenVideo.play().catch(() => {});
         remoteVideo.style.display = "none";
         remoteStatus.classList.add("hidden");
       } else {
@@ -1020,6 +1056,7 @@ class ConferMesh {
       if (status.screenOn) {
         peer.remoteScreenVideo.style.display = "block";
         peer.remoteVideo.style.display = "none";
+        peer.remoteScreenVideo.play().catch(() => {});
       } else {
         peer.remoteScreenVideo.style.display = "none";
         peer.remoteVideo.style.display = status.cameraOn ? "block" : "none";
@@ -1187,6 +1224,8 @@ class ConferMesh {
   }
   async addScreenToAll(stream) {
     this.screenStream = stream;
+    const screenTrack = stream?.getVideoTracks?.()[0];
+    if (screenTrack) { try { screenTrack.contentHint = "detail"; } catch {} }
     const peers = Array.from(this.peers.values());
     await Promise.all(peers.map(async ({ lc }) => {
       if (!lc.pc || lc.pc.connectionState === "closed") return;
@@ -1200,6 +1239,25 @@ class ConferMesh {
     }));
     this.broadcastMediaStatus();
   }
+  async diagnoseScreenShare() {
+    const results = [];
+    for (const [peerId, peer] of this.peers) {
+      const lc = peer.lc;
+      const sender = lc._senderFor("screen");
+      let outbound = null;
+      if (sender?.getStats) {
+        try {
+          const stats = await sender.getStats();
+          for (const report of stats.values()) {
+            if (report.type === "outbound-rtp" && report.kind === "video") { outbound = { packetsSent: report.packetsSent, bytesSent: report.bytesSent, framesEncoded: report.framesEncoded }; break; }
+          }
+        } catch {}
+      }
+      results.push({ peerId, connected: lc.connected, screenMid: lc._screenMid, senderTrack: sender?.track?.id || null, outbound });
+    }
+    return results;
+  }
+
   stopScreenAll() {
     const stream = this.screenStream;
     this.screenStream = null;
@@ -1212,10 +1270,11 @@ class ConferMesh {
   }
   closeAll() {
     for (const [, p] of this.peers) p.lc.close({ keepMedia: true });
+    this.stopScreenAll();
     this.peers.clear();
     this.meshOffers.clear();
-    this.stopScreenAll();
     for (const track of this.localStream.getTracks()) track.stop();
+    if (this.screenStream) { for (const track of this.screenStream.getTracks()) { try { track.stop(); } catch {} } this.screenStream = null; }
     this.localStream = new MediaStream();
     const myVideo = document.getElementById("myVideo");
     if (myVideo) myVideo.srcObject = this.localStream;
@@ -1228,6 +1287,7 @@ class ConferMesh {
 let mesh = null;
 let cryptoKey = null;
 let callStart = null;
+const messageObjectUrls = new Set();
 let timerId = null;
 let isMuted = true;
 let isCamOff = true;
@@ -1262,12 +1322,20 @@ function stopTimer() {
   callStart = null; $("#call-timer").textContent = "00:00";
 }
 
-function addMessage(text, isOut, isSystem) {
+function addMessage(text, isOut, isSystem, senderName = "") {
   const list = $("#msg-list");
   const div = document.createElement("div");
   div.className = "msg " + (isSystem ? "msg-system" : (isOut ? "msg-out" : "msg-in"));
-  const bubble = document.createElement("div"); bubble.className = "bubble";
-  bubble.textContent = text; div.appendChild(bubble); list.appendChild(div);
+  if (senderName && !isSystem && mesh?.peers?.size > 1) {
+    const content = document.createElement("div"); content.className = "msg-content";
+    const sender = document.createElement("div"); sender.className = "msg-sender"; sender.textContent = senderName;
+    const bubble = document.createElement("div"); bubble.className = "bubble"; bubble.textContent = text;
+    content.append(sender, bubble); div.appendChild(content);
+  } else {
+    const bubble = document.createElement("div"); bubble.className = "bubble";
+    bubble.textContent = text; div.appendChild(bubble);
+  }
+  list.appendChild(div);
   list.scrollTop = list.scrollHeight;
 }
 
@@ -1339,6 +1407,7 @@ function fileIcon(kind) {
 }
 
 function addFileMessage(name, url, mime, isOut, size = null) {
+  if (typeof url === "string" && url.startsWith("blob:")) messageObjectUrls.add(url);
   const list = $("#msg-list");
   const div = document.createElement("div");
   div.className = "msg " + (isOut ? "msg-out" : "msg-in");
@@ -1398,7 +1467,9 @@ function initMesh() {
     try {
       const { header, data: decrypted } = await parsePayload(data);
       if (header.t === "msg") {
-        addMessage(new TextDecoder().decode(decrypted), false);
+        const peer = mesh?.peers?.get(peerId);
+        const senderName = (header.senderName || peer?.remoteName || header.senderId || "Unknown").toString().slice(0, 24);
+        addMessage(new TextDecoder().decode(decrypted), false, false, senderName);
         if (mesh?.isHost) mesh.broadcastExcept(peerId, data);
         return;
       }
@@ -1724,6 +1795,8 @@ window.endCall = (options = {}) => {
   pendingInvites.clear();
   callWasConnected = false;
   $("#msg-list").innerHTML = "";
+  for (const url of messageObjectUrls) { try { URL.revokeObjectURL(url); } catch {} }
+  messageObjectUrls.clear();
   $("#host-answer-overlay").classList.remove("active");
   $("#invite-overlay").classList.remove("active");
   $("#peer-panel").classList.remove("active");
@@ -1755,14 +1828,14 @@ window.sendMessage = async () => {
   const connected = mesh && Array.from(mesh.peers.values()).some(p => p.lc.connected);
   if (!connected) { showToast("Not connected yet"); return; }
   try {
-    const payload = await buildPayload({ t: "msg" }, text);
+    const payload = await buildPayload({ t: "msg", senderId: mesh.myId, senderName: mesh.displayName || "Guest" }, text);
     const hostPeer = mesh.hostPeerId && mesh.peers.get(mesh.hostPeerId);
     if (!mesh.isHost && hostPeer && hostPeer.lc.connected) {
       hostPeer.lc.sendBinary(payload);
     } else {
       mesh.broadcast(payload);
     }
-    addMessage(text, true);
+    addMessage(text, true, false, mesh.displayName || "Guest");
     input.value = "";
   } catch (e) { showToast("Send failed"); }
 };
