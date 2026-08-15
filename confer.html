@@ -753,11 +753,62 @@ async function buildPayload(headerObj, plaintext) {
 async function parsePayload(buffer) {
   const view = new DataView(buffer);
   const headerLen = view.getUint32(0, false);
+  if (headerLen < 2 || headerLen > buffer.byteLength - 4) throw new Error("Invalid payload header.");
   const headerBytes = new Uint8Array(buffer, 4, headerLen);
   const header = JSON.parse(new TextDecoder().decode(headerBytes));
   const encrypted = new Uint8Array(buffer, 4 + headerLen);
   const decrypted = await CRYPTO.decrypt(cryptoKey, encrypted);
   return { header, data: decrypted };
+}
+
+// WebRTC data channels have implementation-dependent maximum message sizes.
+// Keep individual encrypted packets small and pace them so large files don't
+// overflow the channel's internal send buffer and tear down the connection.
+const FILE_CHUNK_SIZE = 32 * 1024;
+const DATA_CHANNEL_HIGH_WATERMARK = 512 * 1024;
+const FILE_TRANSFER_TIMEOUT = 5 * 60 * 1000;
+
+async function waitForDataChannelDrain(lc) {
+  const channel = lc?.channel;
+  if (!channel || channel.readyState !== "open") throw new Error("Connection closed while sending file.");
+  if (channel.bufferedAmount <= DATA_CHANNEL_HIGH_WATERMARK) return;
+  channel.bufferedAmountLowThreshold = DATA_CHANNEL_HIGH_WATERMARK / 2;
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      channel.removeEventListener("bufferedamountlow", onLow);
+      clearInterval(check);
+      clearTimeout(timeout);
+      fn();
+    };
+    const onLow = () => finish(resolve);
+    const check = setInterval(() => {
+      if (channel.readyState !== "open") finish(() => reject(new Error("Connection closed while sending file.")));
+      else if (channel.bufferedAmount <= DATA_CHANNEL_HIGH_WATERMARK / 2) finish(resolve);
+    }, 50);
+    const timeout = setTimeout(() => finish(() => reject(new Error("File transfer timed out while waiting for the connection."))), 15000);
+    channel.addEventListener("bufferedamountlow", onLow, { once: true });
+  });
+}
+
+async function sendFileToPeer(lc, file, transferId) {
+  const totalChunks = Math.max(1, Math.ceil(file.size / FILE_CHUNK_SIZE));
+  for (let index = 0; index < totalChunks; index++) {
+    if (!lc?.connected) throw new Error("Connection closed while sending file.");
+    const start = index * FILE_CHUNK_SIZE;
+    const chunk = new Uint8Array(await file.slice(start, Math.min(start + FILE_CHUNK_SIZE, file.size)).arrayBuffer());
+    const payload = await buildPayload({
+      t: "file-chunk", id: transferId, index, total: totalChunks,
+      name: file.name, mime: file.type || "application/octet-stream", size: file.size
+    }, chunk);
+    await waitForDataChannelDrain(lc);
+    try { lc.sendBinary(payload); }
+    catch (e) { throw new Error("File transfer stopped: " + (e?.message || "connection closed")); }
+    // Yield between packets so the browser can service the data channel.
+    if ((index & 7) === 7) await new Promise(requestAnimationFrame);
+  }
 }
 
 /* ===================== Base64 helpers ===================== */
@@ -1059,6 +1110,13 @@ class ConferMesh {
   broadcast(data) {
     for (const [, p] of this.peers) { if (p.lc.connected) try { p.lc.sendBinary(data); } catch (e) {} }
   }
+  async broadcastFilePacketExcept(excludedPeerId, data) {
+    for (const [id, p] of this.peers) {
+      if (id === excludedPeerId || !p.lc.connected) continue;
+      try { await waitForDataChannelDrain(p.lc); p.lc.sendBinary(data); }
+      catch (e) { console.warn("File forwarding stopped for peer " + id + ":", e); }
+    }
+  }
   broadcastExcept(excludedPeerId, data) {
     for (const [id, p] of this.peers) { if (id !== excludedPeerId && p.lc.connected) try { p.lc.sendBinary(data); } catch (e) {} }
   }
@@ -1167,6 +1225,7 @@ let isScreenOn = false;
 let cameraDevices = [];
 let cameraIndex = 0;
 const pendingInvites = new Map();
+const incomingFileTransfers = new Map();
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -1326,13 +1385,32 @@ function initMesh() {
   mesh.onPeerMessage = async (peerId, data) => {
     try {
       const { header, data: decrypted } = await parsePayload(data);
-      if (header.t === "msg") { addMessage(new TextDecoder().decode(decrypted), false); }
-      else if (header.t === "file") {
-        const blob = new Blob([decrypted], { type: header.mime || "application/octet-stream" });
-        addFileMessage(header.name, URL.createObjectURL(blob), header.mime, false, decrypted.byteLength);
+      if (header.t === "msg") {
+        addMessage(new TextDecoder().decode(decrypted), false);
+        if (mesh?.isHost) mesh.broadcastExcept(peerId, data);
+        return;
       }
-      if (mesh?.isHost) mesh.broadcastExcept(peerId, data);
-    } catch (e) { console.error("Decrypt failed", e); }
+      if (header.t === "file-chunk") {
+        if (!header.id || !Number.isInteger(header.index) || !Number.isInteger(header.total) || header.total < 1 || header.index < 0 || header.index >= header.total) throw new Error("Invalid file chunk.");
+        let transfer = incomingFileTransfers.get(header.id);
+        if (!transfer) {
+          transfer = { name: header.name || "file", mime: header.mime || "application/octet-stream", size: Number(header.size) || 0, total: header.total, chunks: new Array(header.total), received: 0, expires: null };
+          transfer.expires = setTimeout(() => incomingFileTransfers.delete(header.id), FILE_TRANSFER_TIMEOUT);
+          incomingFileTransfers.set(header.id, transfer);
+        }
+        if (!transfer.chunks[header.index]) { transfer.chunks[header.index] = new Uint8Array(decrypted); transfer.received++; }
+        if (transfer.received === transfer.total) {
+          clearTimeout(transfer.expires);
+          const bytes = new Uint8Array(transfer.chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0));
+          let offset = 0;
+          for (const chunk of transfer.chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+          const blob = new Blob([bytes], { type: transfer.mime });
+          addFileMessage(transfer.name, URL.createObjectURL(blob), transfer.mime, false, transfer.size || bytes.byteLength);
+          incomingFileTransfers.delete(header.id);
+        }
+        if (mesh?.isHost) await mesh.broadcastFilePacketExcept(peerId, data);
+      }
+    } catch (e) { console.error("Payload processing failed", e); }
   };
 }
 
@@ -1680,20 +1758,23 @@ window.sendMessage = async () => {
 window.onFileSelected = async (input) => {
   const file = input.files[0];
   if (!file) return;
-  const connected = mesh && Array.from(mesh.peers.values()).some(p => p.lc.connected);
-  if (!connected) { showToast("Not connected yet"); return; }
+  const connectedPeers = mesh ? Array.from(mesh.peers.values()).filter(p => p.lc.connected) : [];
+  if (!connectedPeers.length) { showToast("Not connected yet"); input.value = ""; return; }
   try {
-    const buf = await file.arrayBuffer();
-    const payload = await buildPayload({ t: "file", name: file.name, mime: file.type }, buf);
-    const hostPeer = mesh.hostPeerId && mesh.peers.get(mesh.hostPeerId);
-    if (!mesh.isHost && hostPeer && hostPeer.lc.connected) {
-      hostPeer.lc.sendBinary(payload);
+    const transferId = (crypto.randomUUID ? crypto.randomUUID() : "file-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+    if (!mesh.isHost) {
+      const hostPeer = mesh.hostPeerId && mesh.peers.get(mesh.hostPeerId);
+      if (!hostPeer?.lc.connected) throw new Error("Host connection is no longer available.");
+      await sendFileToPeer(hostPeer.lc, file, transferId);
     } else {
-      mesh.broadcast(payload);
+      for (const peer of connectedPeers) await sendFileToPeer(peer.lc, file, transferId);
     }
-    const blob = new Blob([buf], { type: file.type });
-    addFileMessage(file.name, URL.createObjectURL(blob), file.type, true, file.size);
-  } catch (e) { showToast("File send failed"); }
+    addFileMessage(file.name, URL.createObjectURL(file), file.type, true, file.size);
+    showToast("File sent");
+  } catch (e) {
+    console.error("File send failed:", e);
+    showToast(e.message || "File send failed");
+  }
   input.value = "";
 };
 
