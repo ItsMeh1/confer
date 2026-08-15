@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,7 +97,24 @@
   .attach-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s ease}
   .attach-btn:hover{background:var(--surface-raised);color:var(--text)}
   .send-btn svg{transform:rotate(90deg)}
-  .file-thumb{max-width:220px;border-radius:8px;display:block;margin-bottom:4px;cursor:pointer}
+  /* File message cards */
+  .file-card{width:min(330px,100%);padding:11px;border:1px solid var(--border);background:var(--surface-raised);border-radius:14px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box}
+  .msg-out .file-card{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12)}
+  .file-card-preview{width:100%;max-height:210px;object-fit:cover;border-radius:10px;background:var(--surface-strong);cursor:pointer;display:block}
+  .file-card-head{display:flex;align-items:center;gap:10px;min-width:0}
+  .file-type-icon{width:40px;height:40px;border-radius:11px;background:var(--surface-strong);display:flex;align-items:center;justify-content:center;flex:0 0 40px;color:var(--text-secondary)}
+  .file-type-icon svg{width:21px;height:21px}
+  .file-card-info{min-width:0;flex:1}
+  .file-card-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .file-card-meta{font-size:11px;color:var(--text-tertiary);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .file-card-kind{font-weight:600;color:var(--text-secondary)}
+  .file-card-actions{display:flex;gap:7px}
+  .file-card-btn{flex:1;min-height:32px;padding:7px 10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;box-sizing:border-box}
+  .file-card-btn:hover{background:var(--surface-strong)}
+  .file-card-btn.primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+  .file-card-btn.primary:hover{opacity:.88}
+  .file-card-btn svg{width:14px;height:14px;flex:none}
+  .file-card-size{white-space:nowrap}
   .mobile-tabs{display:flex;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)}
   .tab-label{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px;font-size:11px;color:var(--text-tertiary);cursor:pointer;transition:color .15s ease,background .15s ease;user-select:none}
   .tab-label:hover{background:var(--surface-raised)}
@@ -1204,20 +1222,89 @@ function updateLocalMediaIndicators() {
   $("#myVideo").style.display = isCamOff ? "none" : "block";
 }
 
-function addFileMessage(name, url, mime, isOut) {
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "Unknown size";
+  if (bytes < 1024) return bytes + " B";
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024, i = 0;
+  while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+  return (value >= 10 ? value.toFixed(0) : value.toFixed(1)) + " " + units[i];
+}
+
+function getFileKind(name, mime) {
+  const type = (mime || "").toLowerCase();
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (type.startsWith("image/")) return "Image";
+  if (type.startsWith("video/")) return "Video";
+  if (type.startsWith("audio/")) return "Audio";
+  if (type === "application/pdf" || ext === "pdf") return "PDF";
+  if (type.includes("zip") || ["zip","rar","7z","tar","gz"].includes(ext)) return "Archive";
+  if (type.startsWith("text/") || ["txt","md","csv","log"].includes(ext)) return "Text";
+  if (type.includes("javascript") || ["js","mjs","cjs"].includes(ext)) return "JavaScript";
+  if (type.includes("json") || ext === "json") return "JSON";
+  if (type.includes("html") || ["html","htm"].includes(ext)) return "HTML";
+  if (type.includes("css") || ext === "css") return "CSS";
+  if (type.includes("word") || ["doc","docx"].includes(ext)) return "Document";
+  if (type.includes("sheet") || ["xls","xlsx"].includes(ext)) return "Spreadsheet";
+  if (type.includes("presentation") || ["ppt","pptx"].includes(ext)) return "Presentation";
+  return ext ? ext.toUpperCase() + " file" : "File";
+}
+
+function fileIcon(kind) {
+  const map = {
+    Image:'<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m4 16 4-4 3 3 2-2 7 6"/>',
+    Video:'<rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>',
+    Audio:'<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
+    PDF:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M8 15h8M8 11h5"/>',
+    Archive:'<path d="M4 7h16v13H4zM8 7V4h8v3M10 11h4M10 15h4"/>',
+    Document:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>',
+    Spreadsheet:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h8M12 8v8"/>',
+    Presentation:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M8 9l3 2 5-3"/>',
+    Text:'<path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/>',
+    JavaScript:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 16h2v-5M8 16h2M14 11h-2v3h2v2h-2"/>',
+    JSON:'<path d="M8 4c-2 0-2 2-2 4s0 4-2 4c2 0 2 2 2 4s0 4 2 4M16 4c2 0 2 2 2 4s0 4 2 4c-2 0-2 2-2 4s0 4-2 4"/>'
+  };
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (map[kind] || map.Document) + '</svg>';
+}
+
+function addFileMessage(name, url, mime, isOut, size = null) {
   const list = $("#msg-list");
   const div = document.createElement("div");
   div.className = "msg " + (isOut ? "msg-out" : "msg-in");
-  const bubble = document.createElement("div"); bubble.className = "bubble";
+  const card = document.createElement("div"); card.className = "file-card";
+  const kind = getFileKind(name, mime);
+  const canPreview = !!mime && (mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/") || mime === "application/pdf");
+
   if (mime && mime.startsWith("image/")) {
-    const img = document.createElement("img"); img.src = url; img.className = "file-thumb";
-    img.onclick = () => window.open(url, "_blank"); bubble.appendChild(img);
-  } else {
-    const a = document.createElement("a"); a.href = url; a.download = name;
-    a.textContent = "\u{1F4CE} " + name; a.style.color = "inherit"; a.style.textDecoration = "underline";
-    bubble.appendChild(a);
+    const img = document.createElement("img");
+    img.src = url; img.className = "file-card-preview"; img.alt = name;
+    img.title = "Open preview";
+    img.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    card.appendChild(img);
   }
-  div.appendChild(bubble); list.appendChild(div); list.scrollTop = list.scrollHeight;
+
+  const head = document.createElement("div"); head.className = "file-card-head";
+  const icon = document.createElement("div"); icon.className = "file-type-icon"; icon.innerHTML = fileIcon(kind);
+  const info = document.createElement("div"); info.className = "file-card-info";
+  const title = document.createElement("div"); title.className = "file-card-name"; title.textContent = name;
+  const meta = document.createElement("div"); meta.className = "file-card-meta";
+  const kindEl = document.createElement("span"); kindEl.className = "file-card-kind"; kindEl.textContent = kind;
+  meta.appendChild(kindEl);
+  if (size != null) { const sep = document.createElement("span"); sep.textContent = "•"; meta.appendChild(sep); const sizeEl = document.createElement("span"); sizeEl.className = "file-card-size"; sizeEl.textContent = formatFileSize(size); meta.appendChild(sizeEl); }
+  info.append(title, meta); head.append(icon, info); card.appendChild(head);
+
+  const actions = document.createElement("div"); actions.className = "file-card-actions";
+  if (canPreview) {
+    const preview = document.createElement("button"); preview.className = "file-card-btn"; preview.type = "button";
+    preview.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Preview';
+    preview.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    actions.appendChild(preview);
+  }
+  const download = document.createElement("a"); download.className = "file-card-btn primary"; download.href = url; download.download = name;
+  download.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Download';
+  actions.appendChild(download); card.appendChild(actions);
+
+  div.appendChild(card); list.appendChild(div); list.scrollTop = list.scrollHeight;
 }
 
 function initMesh() {
@@ -1242,7 +1329,7 @@ function initMesh() {
       if (header.t === "msg") { addMessage(new TextDecoder().decode(decrypted), false); }
       else if (header.t === "file") {
         const blob = new Blob([decrypted], { type: header.mime || "application/octet-stream" });
-        addFileMessage(header.name, URL.createObjectURL(blob), header.mime, false);
+        addFileMessage(header.name, URL.createObjectURL(blob), header.mime, false, decrypted.byteLength);
       }
       if (mesh?.isHost) mesh.broadcastExcept(peerId, data);
     } catch (e) { console.error("Decrypt failed", e); }
@@ -1605,7 +1692,7 @@ window.onFileSelected = async (input) => {
       mesh.broadcast(payload);
     }
     const blob = new Blob([buf], { type: file.type });
-    addFileMessage(file.name, URL.createObjectURL(blob), file.type, true);
+    addFileMessage(file.name, URL.createObjectURL(blob), file.type, true, file.size);
   } catch (e) { showToast("File send failed"); }
   input.value = "";
 };
