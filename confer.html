@@ -736,6 +736,32 @@ class LanChat {
     this.lastRemoteText = answerText;
     this._emit("onstatechange", this.state);
   }
+  async createRenegotiationOffer() {
+    if (!this.pc) throw new Error("No peer connection yet.");
+    if (this.pc.signalingState !== "stable") return null;
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+    this._cameraMid = this._cameraTransceiver?.mid ?? this._cameraMid;
+    this._screenMid = this._screenTransceiver?.mid ?? this._screenMid;
+    await this._waitForIceComplete();
+    return JSON.stringify(this.pc.localDescription);
+  }
+  async acceptRenegotiationOffer(offerText) {
+    if (!this.pc) throw new Error("No peer connection yet.");
+    if (this.pc.signalingState !== "stable") return null;
+    await this.pc.setRemoteDescription(this._parseJSON(offerText));
+    const answer = await this.pc.createAnswer();
+    await this.pc.setLocalDescription(answer);
+    this._cameraMid = this._cameraTransceiver?.mid ?? this._cameraMid;
+    this._screenMid = this._screenTransceiver?.mid ?? this._screenMid;
+    await this._waitForIceComplete();
+    return JSON.stringify(this.pc.localDescription);
+  }
+  async acceptRenegotiationAnswer(answerText) {
+    if (!this.pc) throw new Error("No peer connection yet.");
+    if (this.pc.signalingState !== "have-local-offer") return;
+    await this.pc.setRemoteDescription(this._parseJSON(answerText));
+  }
   send(data) {
     if (!this.channel) throw new Error("No data channel yet.");
     if (this.channel.readyState !== "open") throw new Error("Channel is not open yet.");
@@ -915,9 +941,10 @@ class ConferMesh {
   createPeer(peerId, isHostSide) {
     const lc = new LanChat({
       channelName: "confer",
-      iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun.cloudflare.com:3478"] }],
+      iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun2.l.google.com:19302", "stun3.l.google.com:19302"] }],
       localStream: this.localStream
     });
+    lc.screenStream = this.screenStream;
     lc.attachLocalVideo(document.getElementById("myVideo"));
 
     const remoteTile = document.createElement("div");
@@ -1023,6 +1050,13 @@ class ConferMesh {
           } else if (cmd.type === "signal-answer") {
             if (this.isHost) this.forwardSignalByRemoteId(cmd.to, cmd);
             else if (cmd.to === this.myId) await this.handleMeshAnswer(cmd.from, cmd.answer);
+          } else if (cmd.type === "renegotiate-offer") {
+            const answer = await lc.acceptRenegotiationOffer(cmd.offer);
+            if (answer) {
+              try { lc.sendJSON({ type: "renegotiate-answer", to: p.remoteId || cmd.from, from: this.myId, answer }); } catch (e) {}
+            }
+          } else if (cmd.type === "renegotiate-answer") {
+            if (cmd.to === this.myId) await lc.acceptRenegotiationAnswer(cmd.answer);
           }
         } catch (e) {}
         return;
@@ -1255,6 +1289,17 @@ class ConferMesh {
     this._refreshLocalPreview();
     await this.syncMedia();
   }
+  async renegotiatePeer(peerId, p) {
+    if (!p?.lc?.connected || !p.lc.pc || !p.remoteId) return;
+    try {
+      const offer = await p.lc.createRenegotiationOffer();
+      if (!offer) return;
+      p.lc.sendJSON({ type: "renegotiate-offer", from: this.myId, to: p.remoteId, offer });
+    } catch (e) {
+      console.warn("Screen-share renegotiation failed for peer:", peerId, e);
+    }
+  }
+
   async addScreenToAll(stream) {
     this.screenStream = stream;
     const screenTrack = stream?.getVideoTracks?.()[0];
@@ -1268,6 +1313,9 @@ class ConferMesh {
         if (!lc._screenTransceiver?.sender && !lc._senderFor("screen")) throw new Error("No negotiated screen sender");
         await lc._replaceSlot("screen", screenTrack, stream);
         await lc._applyVideoQuality();
+        const peerId = Array.from(this.peers.entries()).find(([, value]) => value.lc === lc)?.[0];
+        const peer = peerId ? this.peers.get(peerId) : null;
+        if (peerId && peer?.remoteId) await this.renegotiatePeer(peerId, peer);
       } catch (e) {
         console.warn("Screen share sync failed for peer:", e);
       }
