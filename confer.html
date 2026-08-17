@@ -179,6 +179,8 @@
   .name-input:focus{border-color:var(--text-secondary)}
   .name-input::placeholder{color:var(--text-muted)}
   .field-label{width:100%;font-size:12px;color:var(--text-tertiary);text-align:left;margin-bottom:-4px}
+  .waiting-state{width:100%;max-width:480px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);color:var(--text-secondary);font-size:13px;line-height:1.45;text-align:center;display:none}
+  .waiting-state strong{display:block;color:var(--text-primary);font-size:14px;margin-bottom:4px}
   .quality-select{appearance:none;min-width:106px;padding:8px 28px 8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface-raised);color:var(--text-secondary);font-size:12px;outline:none;cursor:pointer}
   .quality-wrap{position:relative;flex-shrink:0}
   .quality-wrap:after{content:"";position:absolute;right:10px;top:50%;width:6px;height:6px;border-right:1px solid var(--text-tertiary);border-bottom:1px solid var(--text-tertiary);transform:translateY(-65%) rotate(45deg);pointer-events:none}
@@ -214,8 +216,9 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy Offer
           </button>
-          <button id="btn-enter-host" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Next Step</button>
+          <button id="btn-show-host-answer" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Paste Answer</button>
         </div>
+        <div id="host-waiting" class="waiting-state"><strong>Waiting for other person...</strong>Keep this page open. When they send their answer, paste it here to connect.</div>
       </div>
       <div id="join-ui" style="display:none;width:100%;flex-direction:column;gap:12px;align-items:center;">
         <label class="field-label" for="join-name">Your name</label>
@@ -231,8 +234,9 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy Answer
           </button>
-          <button id="btn-enter-join" class="btn btn-primary" style="max-width:160px;font-size:14px;padding:10px;">Enter Room</button>
+
         </div>
+        <div id="join-waiting" class="waiting-state"><strong>Waiting for other person...</strong>Your answer has been generated. Send it to the host and keep this page open while they accept it.</div>
       </div>
     </div>
   </section>
@@ -1538,6 +1542,12 @@ function initMesh() {
   mesh = new ConferMesh();
   mesh.onPeerConnect = (id) => {
     callWasConnected = true;
+    const room = mesh?.roomCode ? "Room " + mesh.roomCode : "Confer";
+    $("#call-title").textContent = room;
+    hideCallEnded();
+    if (location.hash !== "#main") location.hash = "main";
+    hideHostAnswer();
+    hideInvite();
     addCallNotice("A peer joined", "join");
     if (!callStart) { callStart = Date.now(); timerId = setInterval(updateTimer, 1000); }
   };
@@ -1690,7 +1700,8 @@ $("#btn-start-host").addEventListener("click", async () => {
     $("#host-offer").value = offer;
     $("#btn-start-host").style.display = "none";
     $("#host-actions").style.display = "flex";
-    showToast("Offer created. Copy it to your peer.");
+    $("#host-waiting").style.display = "block";
+    showToast("Offer created. Waiting for the other person...");
   } catch (e) { showToast(e.message || "Failed to start host"); console.error(e); }
 });
 
@@ -1700,7 +1711,7 @@ $("#btn-copy-offer").addEventListener("click", async () => {
   catch (e) { $("#host-offer").select(); document.execCommand("copy"); showToast("Offer copied!"); }
 });
 
-$("#btn-enter-host").addEventListener("click", () => {
+$("#btn-show-host-answer").addEventListener("click", () => {
   $("#call-title").textContent = "Room " + mesh.roomCode;
   hideCallEnded();
   location.hash = "main";
@@ -1731,8 +1742,9 @@ $("#btn-verify").addEventListener("click", async () => {
     $("#join-answer").style.display = "block";
     $("#join-answer").value = answer;
     $("#join-actions").style.display = "flex";
+    $("#join-waiting").style.display = "block";
     $("#btn-verify").style.display = "none";
-    showToast("Answer generated. Copy it to the host.");
+    showToast("Answer generated. Waiting for the other person...");
   } catch (e) {
     console.error(e);
     showToast("Error: " + (e.message || "Invalid offer").substring(0, 60));
@@ -1743,13 +1755,6 @@ $("#btn-copy-answer").addEventListener("click", async () => {
   const text = $("#join-answer").value;
   try { await navigator.clipboard.writeText(text); showToast("Answer copied!"); }
   catch (e) { $("#join-answer").select(); document.execCommand("copy"); showToast("Answer copied!"); }
-});
-
-$("#btn-enter-join").addEventListener("click", () => {
-  $("#call-title").textContent = "Room " + mesh.roomCode;
-  hideCallEnded();
-  location.hash = "main";
-  addMessage("Waiting for the host to accept your answer…", false, true);
 });
 
 window.acceptAnswer = async () => {
@@ -1894,8 +1899,9 @@ window.endCall = (options = {}) => {
   updateLocalMediaIndicators();
   $("#host-offer").style.display = "none"; $("#host-offer").value = "";
   $("#host-actions").style.display = "none"; $("#btn-start-host").style.display = "inline-flex";
+  $("#host-waiting").style.display = "none";
   $("#join-offer").style.display = "none"; $("#join-answer").style.display = "none";
-  $("#join-actions").style.display = "none"; $("#btn-verify").style.display = "none";
+  $("#join-actions").style.display = "none"; $("#join-waiting").style.display = "none"; $("#btn-verify").style.display = "none";
   $("#btn-start-join").style.display = "inline-flex";
   $("#host-name").value = "";
   $("#join-name").value = "";
